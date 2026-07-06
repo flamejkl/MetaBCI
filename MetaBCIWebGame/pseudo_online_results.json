@@ -1,0 +1,2082 @@
+[
+  {
+    "trial": 0,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 1,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 2,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 3,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 4,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 5,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 6,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 7,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 8,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 9,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 10,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 11,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 12,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 13,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 14,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 15,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 16,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 17,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 18,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 19,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 20,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 21,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 22,
+    "true": 1,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 23,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 24,
+    "true": 0,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 25,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 26,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 27,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 28,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 29,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 30,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 31,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 32,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 33,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 34,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 35,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 36,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 37,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 38,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 39,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 40,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 41,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 42,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 43,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 44,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 45,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 46,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 47,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 48,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 49,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 50,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 51,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 52,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 53,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 54,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 55,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 56,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 57,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 58,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 59,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 60,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 61,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 62,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 63,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 64,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 65,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 66,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 67,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 68,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 69,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 70,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 71,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 72,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 73,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 74,
+    "true": 2,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 75,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 76,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 77,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 78,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 79,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 80,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 81,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 82,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 83,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 84,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 85,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 86,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 87,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 88,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 89,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 90,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 91,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 92,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 93,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 94,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 95,
+    "true": 1,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 96,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 97,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 98,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 99,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 100,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 101,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 102,
+    "true": 0,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 103,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 104,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 105,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 106,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 107,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 108,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 109,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 110,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 111,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 112,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 113,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 114,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 115,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 116,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 117,
+    "true": 2,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 118,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 119,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 120,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 121,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 122,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 123,
+    "true": 2,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 124,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 125,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 126,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 127,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 128,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 129,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 130,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 131,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 132,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 133,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 134,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 135,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 136,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 137,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 138,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 139,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 140,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 141,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 142,
+    "true": 0,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 143,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 144,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 145,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 146,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 147,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 148,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 149,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 150,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 151,
+    "true": 1,
+    "decoded": 1,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      1.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 152,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 153,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 154,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 155,
+    "true": 3,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 156,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 157,
+    "true": 2,
+    "decoded": 2,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      1.0,
+      0.0
+    ]
+  },
+  {
+    "trial": 158,
+    "true": 3,
+    "decoded": 3,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      0.0,
+      0.0,
+      0.0,
+      1.0
+    ]
+  },
+  {
+    "trial": 159,
+    "true": 0,
+    "decoded": 0,
+    "time": 2.0,
+    "confidence": 0.5,
+    "all_conf": [
+      1.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+]

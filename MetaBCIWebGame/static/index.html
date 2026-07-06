@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>脑控游戏平台</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        body {
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container {
+            background: rgba(0,0,0,0.7);
+            border-radius: 30px;
+            padding: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+            backdrop-filter: blur(5px);
+            max-width: 1600px;
+        }
+        header h1 {
+            text-align: center;
+            color: #fff;
+            margin-bottom: 15px;
+            font-size: 2rem;
+            text-shadow: 2px 2px 4px #000;
+        }
+        .game-area {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        .canvas-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #gameCanvas {
+            background-color: #111;
+            border-radius: 20px 20px 0 0;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            border: 2px solid #ff9800;
+            border-bottom: none;
+            width: 800px;
+            height: 800px;
+            display: block;
+        }
+        #stimCanvas {
+            background-color: transparent;
+            border-radius: 0 0 20px 20px;
+            border: 2px solid #ff9800;
+            border-top: none;
+            width: 800px;
+            height: 180px;
+            display: block;
+            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .maze-controls-container {
+            width: 800px;
+            margin-top: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+            background: rgba(0,0,0,0.5);
+            border-radius: 15px;
+            padding: 10px;
+            backdrop-filter: blur(4px);
+        }
+        .maze-controls-container label {
+            color: white;
+            font-size: 14px;
+            margin-right: 5px;
+        }
+        .maze-controls-container input {
+            width: 70px;
+            padding: 6px;
+            border-radius: 8px;
+            border: none;
+            text-align: center;
+            background: #fff;
+        }
+        .maze-controls-container button {
+            background: #ff9800;
+            border: none;
+            color: white;
+            padding: 6px 16px;
+            font-size: 1rem;
+            border-radius: 40px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 0;
+            width: auto;
+        }
+        .maze-controls-container button:hover {
+            background: #ff5722;
+            transform: scale(1.02);
+        }
+        .control-panel {
+            background: rgba(0,0,0,0.6);
+            border-radius: 20px;
+            padding: 15px;
+            width: 320px;
+            color: white;
+            text-align: center;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .mode-selector {
+            display: flex;
+            gap: 10px;
+        }
+        .mode-selector button {
+            flex: 1;
+            background: #2c3e66;
+            border: none;
+            color: white;
+            padding: 8px 0;
+            font-size: 1rem;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: bold;
+        }
+        .mode-selector button.active {
+            background: #ff9800;
+            box-shadow: 0 0 10px #ff9800;
+        }
+        .game-selector {
+            display: flex;
+            gap: 10px;
+        }
+        .game-selector button {
+            flex: 1;
+            background: #2c3e66;
+            border: none;
+            color: white;
+            padding: 8px 0;
+            font-size: 1rem;
+            border-radius: 40px;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: bold;
+        }
+        .game-selector button.active {
+            background: #ff9800;
+            box-shadow: 0 0 10px #ff9800;
+        }
+        .confidence-panel {
+            background: rgba(0,0,0,0.5);
+            border-radius: 15px;
+            padding: 10px;
+        }
+        .confidence-panel h3 {
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+        .bars {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .dir {
+            width: 30px;
+            text-align: center;
+            font-weight: bold;
+        }
+        .bar-container {
+            background: #333;
+            border-radius: 10px;
+            height: 20px;
+            flex: 1;
+            overflow: hidden;
+        }
+        .bar {
+            background: #4caf50;
+            width: 0%;
+            height: 100%;
+            transition: width 0.1s ease;
+        }
+        .bar-item span:last-child {
+            width: 40px;
+            text-align: right;
+            font-family: monospace;
+        }
+        .info {
+            background: #000000aa;
+            padding: 8px;
+            border-radius: 15px;
+            font-size: 0.9rem;
+        }
+        .key-hint {
+            font-size: 11px;
+            color: #aaa;
+        }
+        .demo-controls, .realtime-controls, .eval-controls {
+            display: flex;
+            gap: 10px;
+        }
+        .demo-controls button, .realtime-controls button, .eval-controls button {
+            flex: 1;
+            margin-top: 0;
+        }
+        .demo-result-panel {
+            background: rgba(0,0,0,0.5);
+            border-radius: 15px;
+            padding: 10px;
+            text-align: left;
+        }
+        .demo-result-panel h3 {
+            margin: 0 0 8px 0;
+            font-size: 1rem;
+            text-align: center;
+        }
+        #demo-log {
+            background: #1e1e1e;
+            color: #0f0;
+            font-family: monospace;
+            font-size: 11px;
+            padding: 6px;
+            border-radius: 8px;
+            height: 130px;
+            overflow-y: auto;
+            margin-bottom: 6px;
+            white-space: pre-wrap;
+        }
+        #demo-summary {
+            font-size: 12px;
+            text-align: center;
+            background: #00000088;
+            padding: 4px;
+            border-radius: 8px;
+        }
+        #demo-progress {
+            font-size: 12px;
+            text-align: center;
+            margin-top: 4px;
+        }
+        #eval-info {
+            margin-top: 8px;
+            font-size: 14px;
+            color: #ffcc00;
+            display: none;
+            text-align: center;
+            background: rgba(0,0,0,0.3);
+            padding: 4px;
+            border-radius: 8px;
+        }
+        footer {
+            text-align: center;
+            color: #ccc;
+            margin-top: 20px;
+            font-size: 0.8rem;
+        }
+        .stimuli-container {
+            display: none !important;
+        }
+        #demo-log, #demo-summary, #demo-progress {
+            user-select: text !important;
+            -webkit-user-select: text !important;
+            -moz-user-select: text !important;
+        }
+        .eval-controls {
+            border-top: 1px solid #555;
+            padding-top: 10px;
+            margin-top: 5px;
+        }
+        .eval-controls button#btn-eval-start {
+            background: #ff9800;
+        }
+        .eval-controls button#btn-eval-stop {
+            background: #f44336;
+        }
+        .eval-controls button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header><h1>🧠 脑控游戏平台 · 多游戏版</h1></header>
+    <div class="game-area">
+        <div class="canvas-wrapper">
+            <canvas id="gameCanvas" width="800" height="800"></canvas>
+            <canvas id="stimCanvas" width="800" height="180"></canvas>
+            <div id="maze-controls" class="maze-controls-container" style="display:flex;">
+                <label>宽度(5~31奇数):</label>
+                <input type="number" id="mazeWidth" value="31" min="5" max="31" step="2">
+                <label>高度(5~31奇数):</label>
+                <input type="number" id="mazeHeight" value="31" min="5" max="31" step="2">
+                <button id="generateMazeBtn">✨ 生成新迷宫</button>
+            </div>
+        </div>
+        <div class="control-panel">
+            <div class="mode-selector">
+                <button id="mode-offline" class="active">📀 离线演示</button>
+                <button id="mode-online">⚡ 在线演示</button>
+            </div>
+            <div id="offline-panel">
+                <div class="game-selector">
+                    <button id="btn-maze" class="active">🧩 迷宫</button>
+                    <button id="btn-snake">🐍 贪吃蛇</button>
+                    <button id="btn-racing">🏎️ 赛车</button>
+                </div>
+                <div class="demo-controls">
+                    <button id="btn-demo-start" style="background:#4caf50;">🎮 开始演示</button>
+                    <button id="btn-demo-stop" disabled style="background:#f44336;">⏹️ 停止演示</button>
+                </div>
+                <div class="demo-result-panel">
+                    <h3>📊 演示对比结果</h3>
+                    <div id="demo-log">等待开始演示...</div>
+                    <div id="demo-summary">标准路径长度: - | 实际步数: - | 正确率: -</div>
+                    <div id="demo-progress">步骤: 0 / 0</div>
+                </div>
+            </div>
+            <div id="online-panel" style="display:none;">
+                <div class="game-selector">
+                    <button id="btn-maze-online" class="active">🧩 迷宫</button>
+                    <button id="btn-snake-online">🐍 贪吃蛇</button>
+                    <button id="btn-racing-online">🏎️ 赛车</button>
+                </div>
+                <div class="realtime-controls">
+                    <button id="btn-realtime-start" style="background:#4caf50;">▶ 实时解码</button>
+                    <button id="btn-realtime-stop" disabled style="background:#f44336;">⏹️ 停止解码</button>
+                </div>
+                <div class="info" id="ws-status">🔌 WebSocket: 未连接</div>
+                <div class="eval-controls">
+                    <button id="btn-eval-start">📊 在线评测 </button>
+                    <button id="btn-eval-stop" disabled>⏹️ 停止评测</button>
+                    <div id="eval-info">就绪</div>
+                </div>
+            </div>
+            <div class="confidence-panel">
+                <h3>实时置信度</h3>
+                <div class="bars">
+                    <div class="bar-item"><span class="dir">↑</span><div class="bar-container"><div id="bar-up" class="bar" style="width:0%"></div></div><span id="conf-up">0%</span></div>
+                    <div class="bar-item"><span class="dir">↓</span><div class="bar-container"><div id="bar-down" class="bar" style="width:0%"></div></div><span id="conf-down">0%</span></div>
+                    <div class="bar-item"><span class="dir">←</span><div class="bar-container"><div id="bar-left" class="bar" style="width:0%"></div></div><span id="conf-left">0%</span></div>
+                    <div class="bar-item"><span class="dir">→</span><div class="bar-container"><div id="bar-right" class="bar" style="width:0%"></div></div><span id="conf-right">0%</span></div>
+                </div>
+                <div class="info">最后指令: <span id="last-cmd">—</span></div>
+            </div>
+            <div class="info">
+                💎 钻石: <span id="collectedDiamonds">0</span> / <span id="totalDiamonds">0</span><br>
+                🎯 得分: <span id="score">0</span><br>
+                🕹️ 控制: ↑ ↓ ← → 或 W A S D
+            </div>
+            <div class="key-hint">
+                💡 绿色小球/蛇/车 = 玩家 | 出口/食物/终点 = 金色<br>
+                ✨ 收集钻石+10分 | 到达出口根据收集率额外加分
+            </div>
+        </div>
+    </div>
+    <div class="stimuli-container" style="display:none;">
+        <div id="stim-up" class="stimulus">↑</div>
+        <div id="stim-down" class="stimulus">↓</div>
+        <div id="stim-left" class="stimulus">←</div>
+        <div id="stim-right" class="stimulus">→</div>
+    </div>
+    <footer>基于 MetaBCI 的脑控游戏 | Prim 迷宫 + 钻石收集 | 支持贪吃蛇/赛车 | 在线/离线模式</footer>
+</div>
+<script src="game.js"></script>
+</body>
+</html>

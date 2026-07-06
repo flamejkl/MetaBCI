@@ -1,0 +1,381 @@
+/* applications/ssvep_webgame/static/style.css */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+body {
+    background: linear-gradient(135deg, #1e3c72, #2a5298);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.container {
+    background: rgba(0,0,0,0.7);
+    border-radius: 30px;
+    padding: 20px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+    backdrop-filter: blur(5px);
+}
+
+header h1 {
+    text-align: center;
+    color: #fff;
+    margin-bottom: 15px;
+    font-size: 2rem;
+    text-shadow: 2px 2px 4px #000;
+}
+
+.game-selector {
+    display: flex;
+    justify-content: center;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.game-selector button {
+    background: #2c3e66;
+    border: none;
+    color: white;
+    padding: 8px 25px;
+    font-size: 1.1rem;
+    border-radius: 40px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-weight: bold;
+}
+
+.game-selector button.active {
+    background: #ff9800;
+    box-shadow: 0 0 10px #ff9800;
+}
+
+.game-selector button:hover {
+    transform: scale(1.05);
+    background: #ff5722;
+}
+
+.game-area {
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: flex-start;
+}
+
+/* 画布容器，用于放置 canvas 和下方控件 */
+.canvas-wrapper {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+#gameCanvas {
+    background-color: #111;
+    border-radius: 20px;
+    box-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    border: 2px solid #ff9800;
+    width: 600px;
+    height: 600px;
+}
+
+/* 迷宫控件容器：与画布同宽，水平排列，自动换行，间距15px */
+.maze-controls-container {
+    width: 600px;
+    margin-top: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    background: rgba(0,0,0,0.5);
+    border-radius: 15px;
+    padding: 10px;
+    backdrop-filter: blur(4px);
+}
+
+.maze-controls-container label {
+    color: white;
+    font-size: 14px;
+    margin-right: 5px;
+}
+
+.maze-controls-container input {
+    width: 70px;
+    padding: 6px;
+    border-radius: 8px;
+    border: none;
+    text-align: center;
+    background: #fff;
+}
+
+.maze-controls-container button {
+    background: #ff9800;
+    border: none;
+    color: white;
+    padding: 6px 16px;
+    font-size: 1rem;
+    border-radius: 40px;
+    cursor: pointer;
+    font-weight: bold;
+    margin: 0;
+    width: auto;
+}
+
+.maze-controls-container button:hover {
+    background: #ff5722;
+    transform: scale(1.02);
+}
+
+.confidence-panel {
+    background: rgba(0,0,0,0.6);
+    border-radius: 20px;
+    padding: 15px;
+    width: 240px;
+    color: white;
+    text-align: center;
+}
+
+.confidence-panel h3 {
+    margin-bottom: 15px;
+    border-bottom: 1px solid #ff9800;
+    display: inline-block;
+    padding-bottom: 5px;
+}
+
+.bars {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.bar-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.dir {
+    font-size: 1.5rem;
+    width: 40px;
+    text-align: center;
+    font-weight: bold;
+}
+
+.bar-container {
+    background: #333;
+    border-radius: 10px;
+    width: 100%;
+    height: 20px;
+    overflow: hidden;
+}
+
+.bar {
+    background: #4caf50;
+    width: 0%;
+    height: 100%;
+    transition: width 0.1s ease;
+}
+
+.bar-item span:last-child {
+    width: 45px;
+    text-align: right;
+    font-family: monospace;
+}
+
+.info {
+    background: #000000aa;
+    padding: 8px;
+    border-radius: 15px;
+    margin-top: 10px;
+    font-size: 1rem;
+}
+
+/* 控制面板（右侧）样式 */
+.control-panel {
+    background: rgba(0,0,0,0.6);
+    border-radius: 20px;
+    padding: 15px;
+    width: 300px;
+    color: white;
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* 模式切换按钮组 */
+.mode-selector {
+    display: flex;
+    gap: 10px;
+}
+
+.mode-selector button {
+    flex: 1;
+    background: #2c3e66;
+    border: none;
+    color: white;
+    padding: 8px 0;
+    font-size: 1rem;
+    border-radius: 40px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-weight: bold;
+}
+
+.mode-selector button.active {
+    background: #ff9800;
+    box-shadow: 0 0 10px #ff9800;
+}
+
+.mode-selector button:hover {
+    background: #ff5722;
+    transform: scale(1.02);
+}
+
+/* 游戏选择按钮组（离线/在线面板内部） */
+.game-selector-inline {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.game-selector-inline button {
+    flex: 1;
+    background: #2c3e66;
+    border: none;
+    color: white;
+    padding: 8px 0;
+    font-size: 1rem;
+    border-radius: 40px;
+    cursor: pointer;
+    transition: 0.2s;
+    font-weight: bold;
+}
+
+.game-selector-inline button.active {
+    background: #ff9800;
+    box-shadow: 0 0 10px #ff9800;
+}
+
+/* 演示模式控件 */
+.demo-controls {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.demo-controls button {
+    flex: 1;
+    background: #4caf50;
+    margin-top: 0;
+}
+
+.demo-controls button:last-child {
+    background: #f44336;
+}
+
+.demo-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.demo-result-panel {
+    background: rgba(0,0,0,0.5);
+    border-radius: 15px;
+    padding: 10px;
+    margin-top: 5px;
+    text-align: left;
+}
+
+.demo-result-panel h3 {
+    margin: 0 0 8px 0;
+    font-size: 1rem;
+    text-align: center;
+    color: #ff9800;
+}
+
+#demo-log {
+    background: #1e1e1e;
+    color: #0f0;
+    font-family: monospace;
+    font-size: 11px;
+    padding: 6px;
+    border-radius: 8px;
+    height: 130px;
+    overflow-y: auto;
+    margin-bottom: 6px;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+#demo-summary {
+    font-size: 12px;
+    text-align: center;
+    background: #00000088;
+    padding: 4px;
+    border-radius: 8px;
+}
+
+/* 在线模式实时控制按钮组 */
+.realtime-controls {
+    display: flex;
+    gap: 10px;
+    margin: 10px 0;
+}
+
+.realtime-controls button {
+    flex: 1;
+    background: #4caf50;
+    margin-top: 0;
+}
+
+.realtime-controls button:last-child {
+    background: #f44336;
+}
+
+.realtime-controls button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+footer {
+    text-align: center;
+    color: #ccc;
+    margin-top: 20px;
+    font-size: 0.8rem;
+}
+
+.demo-result-panel #demo-log,
+.demo-result-panel #demo-summary {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+}
+
+#demo-log, #demo-summary, #demo-progress {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+}
+
+/* 强制可复制 */
+.demo-result-panel,
+#demo-log,
+#demo-summary,
+#demo-progress,
+.demo-result-panel *,
+#demo-log *,
+#demo-summary *,
+#demo-progress * {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+    -moz-user-select: text !important;
+    -ms-user-select: text !important;
+}
