@@ -18,7 +18,8 @@ from fbcca_eigh import get_default_filterbank
 # ============================================================
 #  全局配置（保持不变）
 # ============================================================
-DATA_ROOT = r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI\data_self"  # 仅使用 offset0 数据
+from config import BASE_DIR
+DATA_ROOT = os.path.join(BASE_DIR, "data_self")# 仅使用 offset0 数据
 TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
 SAMPLE_RATE = 250
 N_COMPONENTS_TDCA = 3

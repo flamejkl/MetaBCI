@@ -1,6 +1,9 @@
 # config.py
 # -*- coding: utf-8 -*-
 
+import os
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # ========== 刺激参数 ==========
 STIM_FREQS = [8.25, 11.0, 13.75, 16.5]      # Hz，对应 [上, 下, 左, 右]
 STIM_WINDOW_SIZE = (800, 600)
@@ -41,7 +44,7 @@ WINDOW_LEN_SAMPLES = int(SAMPLE_RATE * WINDOW_LEN_SEC)          # 500
 RAW_WINDOW_SAMPLES = int(ONLINE_SAMPLE_RATE * WINDOW_LEN_SEC)   # 2000
 
 # ========== 离线模拟数据路径 ==========
-OFFLINE_DATA_ROOT = r"D:\pyproject\MetaBCI\data_self"   # 存放 .npy 文件的目录
+OFFLINE_DATA_ROOT = os.path.join(BASE_DIR, "data_self")   # 存放 .npy 文件的目录
 
 # ========== 离线模拟超时测试参数 ==========
 OFFLINE_TIMEOUT_PROB = 0.2      # 每个试次 20% 概率触发超时
@@ -63,3 +66,8 @@ GW_MAX_LENGTH = 500         # 2.0s 强制停止
 GW_MARGIN_THRESHOLD = 0.35
 GW_MAX_THRESHOLD = 0.75
 GW_CONSECUTIVE_REQUIRED = 1
+
+OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]  # 枕区通道索引
+
+# ========== 离线演示/回放数据路径 ==========
+DEMO_DATA_ROOT = os.path.join(BASE_DIR, "data_self_test")   # 独立于训练数据

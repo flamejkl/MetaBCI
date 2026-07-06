@@ -14,7 +14,8 @@ from config import WINDOW_LEN_SAMPLES, SAMPLE_RATE
 from online_decode import DynamicStoppingDecoder
 
 # ========== 配置 ==========
-DATA_ROOT = r"D:\pyproject\MetaBCI\data_self"  # 数据根目录
+from config import BASE_DIR
+DATA_ROOT = os.path.join(BASE_DIR, "data_self") # 数据根目录
 MODEL_PATH = "self_ssvep_model.pkl"  # 模型路径
 OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]  # 枕区8通道
 WINDOW_SAMPLES = WINDOW_LEN_SAMPLES  # 500

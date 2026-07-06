@@ -5,8 +5,10 @@ import numpy as np
 import scipy.io as sio
 
 # ===== 配置 =====
-MAT_FILE = r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI\MetaBCIWebGame\data\20260703_222223\full_experiment.mat"  # 修改为你的 .mat 文件路径
-OUTPUT_ROOT = r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI\data_self_multi_offset"  # 建议新建一个目录，避免覆盖原数据
+EXPERIMENT_FOLDER = "20260704_222224"
+DATA_ROOT = os.path.join(os.path.dirname(__file__), "data")
+MAT_FILE = os.path.join(DATA_ROOT, EXPERIMENT_FOLDER, "full_experiment.mat")
+OUTPUT_ROOT = os.path.join(os.path.dirname(__file__), "data_self_test")
 WINDOW_SAMPLES = 500
 TRIGGER_THRESHOLD = 0.5
 

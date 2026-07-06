@@ -19,7 +19,8 @@ OPTIMAL_CONFIG = {
     'check_step': 25
 }
 
-DATA_ROOT = r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI\data_self"
+from config import OFFLINE_DATA_ROOT
+DATA_ROOT = OFFLINE_DATA_ROOT
 OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]
 SAMPLE_RATE = 250
 WINDOW_LENGTHS = [125, 250, 375, 500]

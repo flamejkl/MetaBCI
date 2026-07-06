@@ -25,7 +25,8 @@ from fbcca_eigh import get_default_filterbank
 #  配置参数（可根据实际效果微调）
 # ============================================================
 # 请改为你新生成的多偏移数据集路径
-DATA_ROOT = r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI\data_self_multi_offset"
+from config import BASE_DIR
+DATA_ROOT = os.path.join(BASE_DIR, "data_self_multi_offset")
 
 TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
 WINDOW_SAMPLES = 500

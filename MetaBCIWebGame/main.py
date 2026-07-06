@@ -1,8 +1,6 @@
 # main.py
 print("MAIN FILE =", __file__, flush=True)
 import sys
-# 关键：将 metabci 的父目录加入搜索路径
-sys.path.insert(0, r"D:\pyproject\MetaBCI")
 
 import signal
 import time
