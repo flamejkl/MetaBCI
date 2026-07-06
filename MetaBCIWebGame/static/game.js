@@ -13,7 +13,7 @@
         left: 1,    // 1 * π
         right: 1.5  // 1.5 * π
     };
-    const stimFreqs = { up: 8, down: 10, left: 12, right: 15 };
+    const stimFreqs = { up: 8.25, down: 11.0, left: 13.75, right: 16.5 };
     const dirKeys = ['up', 'down', 'left', 'right'];
     const dirToIdx = { up: 0, down: 1, left: 2, right: 3 };
     const idxToDir = ['up', 'down', 'left', 'right'];
@@ -53,12 +53,14 @@
     let evalSequence = [];
     let evalTrialIndex = 0;
     let evalWaitingForResult = false;
-    let evalTrialTimer = null;
+    let evalPromptTimer = null;      // 提示阶段定时器
+    let evalMainTimer = null;        // 解码超时定时器
+    let evalExtraTimer = null;       // 额外保护超时
     let evalRestTimer = null;
     let showIndicator = true;
     let evalResults = [];
-    let evalRetryCount = 0;          // 当前步骤的重试次数
-    let evalTrialStartTime = 0;      // 记录试次开始时间（用于超时）
+    let evalRetryCount = 0;
+    let evalTrialStartTime = 0;
 
     // ==================== 刺激控制 ====================
     let stimFlashing = false;
@@ -310,7 +312,7 @@
             return cand.slice(0, Math.min(count, cand.length));
         }
         handleMove(cmd) {
-            if (!this.state) return;  // 不再检查 evalMode，由外部控制
+            if (!this.state) return;
             let newPos = [...this.state.player];
             switch(cmd) {
                 case 'up': newPos[0]--; break;
@@ -431,7 +433,7 @@
             this._updateUI();
         }
         handleMove(cmd) {
-            if (!this.state) return;  // 不再检查 evalMode
+            if (!this.state) return;
             let newDir = null;
             switch(cmd) {
                 case 'up': newDir = 'up'; break;
@@ -492,7 +494,7 @@
             this._updateUI();
         }
         handleMove(cmd) {
-            if (!this.state) return;  // 不再检查 evalMode
+            if (!this.state) return;
             switch(cmd) {
                 case 'left': this.state.position = Math.max(0, this.state.position - 0.05); break;
                 case 'right': this.state.position = Math.min(1, this.state.position + 0.05); break;
@@ -586,7 +588,6 @@
     }
 
     async function startDemo() {
-        updateConfidenceBars([0, 0, 0, 0]);
         if (demoActive) return;
         if (evalMode) stopEvalMode();
         if (currentGame !== 'maze' || !(activeGame instanceof MazeGame)) {
@@ -599,20 +600,7 @@
             alert("无法找到路径！");
             return;
         }
-        demoPath = path;
-        demoCurrentStep = 0;
-        demoActualSteps = [];
-        demoRetryCount = 0;
-        demoActive = true;
-        demoStopFlag = false;
-        const startBtn = document.getElementById('btn-demo-start');
-        const stopBtn = document.getElementById('btn-demo-stop');
-        if (startBtn) startBtn.disabled = true;
-        if (stopBtn) stopBtn.disabled = false;
-        if (demoLogDiv) demoLogDiv.innerHTML = '';
-        if (demoSummaryDiv) demoSummaryDiv.innerHTML = `标准路径长度: ${path.length} | 实际步数: - | 正确率: -`;
-        if (demoProgressDiv) demoProgressDiv.innerHTML = `步骤: 0 / ${path.length}`;
-        sendNextDemoStep();
+        await startEvalMode(path);
     }
 
     function sendNextDemoStep() {
@@ -708,234 +696,264 @@
     }
 
     // ==================== 评测模式（重构，与离线演示逻辑一致） ====================
-    async function startEvalMode(sequence) {
-        if (demoActive) stopDemo();
-
-        // 如果实时解码未启动，则启动
-        if (!realtimeActive) {
-            startRealtime();
-            let waitCount = 0;
-            while (!realtimeActive && waitCount < 20) {
-                await new Promise(resolve => setTimeout(resolve, 100));
-                waitCount++;
-            }
-            if (!realtimeActive) {
-                alert("❌ 无法启动实时解码，请检查模型或设备连接");
-                return;
-            }
-        }
-
-        // 发送 start_eval 并等待后端确认
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "start_eval" }));
-            console.log('[前端] 发送 start_eval，等待后端确认...');
-            try {
-                await new Promise((resolve, reject) => {
-                    const timeout = setTimeout(() => {
-                        ws.removeEventListener('message', handler);
-                        reject(new Error('等待 eval_started 超时'));
-                    }, 3000);
-                    const handler = (event) => {
-                        try {
-                            const data = JSON.parse(event.data);
-                            if (data.type === "eval_started") {
-                                clearTimeout(timeout);
-                                ws.removeEventListener('message', handler);
-                                resolve();
-                            }
-                        } catch (e) {}
-                    };
-                    ws.addEventListener('message', handler);
-                });
-                console.log('[前端] 后端已进入评测模式');
-            } catch (e) {
-                console.warn('[前端] 等待 eval_started 超时，继续执行');
-            }
-        } else {
-            alert('WebSocket 未连接，无法启动评测');
+    async function startEvalMode(sequence, source = 'offline') {
+    if (demoActive) stopDemo();
+    if (!sequence) {
+        if (currentGame !== 'maze' || !(activeGame instanceof MazeGame)) {
+            alert("请先切换到迷宫游戏");
             return;
         }
-
-        if (!stimFlashing) {
-            startStimuli();
+        const mazeGame = activeGame;
+        const path = mazeGame.recomputeShortestPath();
+        if (path.length === 0) {
+            alert("无法找到路径！");
+            return;
         }
-
-        if (!sequence) {
-            if (currentGame !== 'maze' || !(activeGame instanceof MazeGame)) {
-                alert("请先切换到迷宫游戏");
-                return;
-            }
-            const mazeGame = activeGame;
-            const path = mazeGame.recomputeShortestPath();
-            if (path.length === 0) {
-                alert("无法找到路径！");
-                return;
-            }
-            evalSequence = path;
-        } else {
-            evalSequence = sequence;
-        }
-
-        evalTrialIndex = 0;
-        evalMode = true;
-        evalWaitingForResult = false;
-        showIndicator = true;
-        evalResults = [];
-        evalRetryCount = 0;
-        document.getElementById('eval-info').style.display = 'block';
-        document.getElementById('btn-eval-start').disabled = true;
-        document.getElementById('btn-eval-stop').disabled = false;
-        document.getElementById('eval-info').innerHTML = `评测准备就绪，共 ${evalSequence.length} 步`;
-        setTimeout(() => { if (evalMode) startNextEvalTrial(); }, 500);
+        sequence = path;
     }
+    evalSequence = sequence;
+    evalTrialIndex = 0;
+    evalMode = true;
+    evalWaitingForResult = false;
+    showIndicator = true;
+    evalResults = [];
+    evalRetryCount = 0;
+
+    // 根据当前模式决定发送的消息类型
+    const msgType = (currentMode === 'online') ? "start_eval" : "start_offline_sim";
+    if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: msgType }));
+        console.log(`[前端] 发送 ${msgType}`);
+        try {
+            await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    ws.removeEventListener('message', handler);
+                    reject(new Error('等待 eval_started 超时'));
+                }, 10000);
+                const handler = (event) => {
+                    try {
+                        const data = JSON.parse(event.data);
+                        if (data.type === "eval_started") {
+                            clearTimeout(timeout);
+                            ws.removeEventListener('message', handler);
+                            resolve();
+                        } else if (data.type === "eval_error") {
+                            clearTimeout(timeout);
+                            ws.removeEventListener('message', handler);
+                            reject(new Error(data.message));
+                        }
+                    } catch (e) {}
+                };
+                ws.addEventListener('message', handler);
+            });
+            console.log('[前端] 后端已进入评测模式');
+        } catch (e) {
+            console.warn('[前端] 启动评测失败:', e.message);
+            alert('启动评测失败: ' + e.message);
+            evalMode = false;   // 重置状态
+            document.getElementById('btn-eval-start').disabled = false;
+            document.getElementById('btn-eval-stop').disabled = true;
+            document.getElementById('btn-demo-start').disabled = false;
+            document.getElementById('btn-demo-stop').disabled = true;
+            return;
+        }
+    } else {
+        alert('WebSocket 未连接');
+        return;
+    }
+
+    if (!stimFlashing) startStimuli();
+
+    document.getElementById('eval-info').style.display = 'block';
+    document.getElementById('btn-eval-start').disabled = true;
+    document.getElementById('btn-eval-stop').disabled = false;
+    document.getElementById('eval-info').innerHTML = `评测准备就绪，共 ${sequence.length} 步`;
+    document.getElementById('btn-demo-start').disabled = true;
+    document.getElementById('btn-demo-stop').disabled = false;
+
+    setTimeout(() => { if (evalMode) startNextEvalTrial(); }, 500);
+}
 
     function stopEvalMode() {
-        evalMode = false;
-        evalTarget = null;
-        evalWaitingForResult = false;
-        showIndicator = true;
-        if (evalTrialTimer) clearTimeout(evalTrialTimer);
-        if (evalRestTimer) clearTimeout(evalRestTimer);
-        document.getElementById('eval-info').style.display = 'none';
-        document.getElementById('btn-eval-start').disabled = false;
-        document.getElementById('btn-eval-stop').disabled = true;
+    evalMode = false;
+    evalTarget = null;
+    evalWaitingForResult = false;
+    showIndicator = true;
+    clearTimeout(evalPromptTimer);
+    clearTimeout(evalMainTimer);
+    clearTimeout(evalExtraTimer);
+    clearTimeout(evalRestTimer);
+    document.getElementById('eval-info').style.display = 'none';
+    document.getElementById('btn-eval-start').disabled = false;
+    document.getElementById('btn-eval-stop').disabled = true;
+    document.getElementById('btn-demo-start').disabled = false;
+    document.getElementById('btn-demo-stop').disabled = true;
 
-        if (stimFlashing) {
-            stopStimuli();
-        }
-        if (realtimeActive) {
-            stopRealtime();
-        }
-        if (activeGame) activeGame.render(gameCtx);
+    if (stimFlashing) stopStimuli();
+    if (realtimeActive) stopRealtime();
+    if (activeGame) activeGame.render(gameCtx);
 
-        // 输出汇总
-        const totalAttempts = evalResults.length;
-        let correct = 0;
-        for (let s of evalResults) {
-            if (s.match) correct++;
-        }
-        const accuracy = totalAttempts > 0 ? (correct / totalAttempts * 100).toFixed(2) : 0;
-        console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%`);
+    const totalAttempts = evalResults.length;
+    let correct = 0;
+    for (let s of evalResults) if (s.match) correct++;
+    const accuracy = totalAttempts > 0 ? (correct / totalAttempts * 100).toFixed(2) : 0;
+    // 显示在 demo-summary 区域
+    const summaryDiv = document.getElementById('demo-summary');
+    if (summaryDiv) {
+        summaryDiv.innerHTML = `在线评测结果 | 总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%`;
     }
+    console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%`);
+}
 
-    // 开始下一个试次（包括重试）
     function startNextEvalTrial() {
         if (evalTrialIndex >= evalSequence.length) {
-            // 所有步骤完成
             stopEvalMode();
             alert('✅ 评测完成！请查看控制台获取详细记录。');
             return;
         }
-
         evalTarget = evalSequence[evalTrialIndex];
         evalWaitingForResult = false;
         showIndicator = true;
-        evalRetryCount = 0;  // 重置重试计数
+        evalRetryCount = 0;
         document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 👀 请注视 ${evalTarget}`;
         sendEvalTrialStart();
     }
 
-    // 发送 trial_start（并设置超时）
-    function sendEvalTrialStart() {
-        if (!evalMode) return;
-        // 提示阶段
-        showIndicator = true;
-        document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 👀 请注视 ${evalTarget} (尝试 ${evalRetryCount+1})`;
-        evalTrialTimer = setTimeout(() => {
-            if (!evalMode) return;
-            // 箭头消失
-            showIndicator = false;
-            document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 🧠 解码中... (2秒)`;
-            // 发送 trial_start
-            if (ws && ws.readyState === WebSocket.OPEN) {
-                ws.send(JSON.stringify({ type: "trial_start", expected: evalTarget }));
-                console.log(`[前端] 发送 trial_start, expected=${evalTarget}, 重试=${evalRetryCount}`);
-            } else {
-                console.error('[前端] WebSocket 未连接，无法发送 trial_start');
-                handleEvalResult({ match: false, decoded: 'ws_error', confidence: 0 });
-                return;
-            }
-            evalWaitingForResult = true;
-            evalTrialStartTime = Date.now();
-            // 设置超时（2.5秒后未收到结果视为超时失败）
-            evalTrialTimer = setTimeout(() => {
-                if (evalWaitingForResult) {
-                    console.warn('[前端] trial_start 超时');
-                    handleEvalResult({
-                        match: false,
-                        decoded: 'timeout',
-                        confidence: 0
-                    });
-                }
-            }, 2500);
-        }, 1500);
+    // ==================== 核心：发送评测步骤 ====================
+function sendEvalTrialStart() {
+    if (!evalMode) return;
+
+    // 防止重复发送：如果已有等待结果，则忽略本次调用
+    if (evalWaitingForResult) {
+        console.warn('[前端] 已有等待结果，不重复发送 eval_step');
+        return;
     }
 
-    // 处理评测结果（与离线演示 recordDemoStep 逻辑一致）
-    function handleEvalResult(data) {
-        if (!evalMode || !evalWaitingForResult) return;
-        evalWaitingForResult = false;
-        if (evalTrialTimer) clearTimeout(evalTrialTimer);
+    showIndicator = true;
+    document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 👀 请注视 ${evalTarget} (尝试 ${evalRetryCount+1})`;
 
-        const match = data.match;
-        const decoded = data.decoded || '无';
-        const confidence = (data.confidence * 100).toFixed(1);
-        const expected = evalTarget;
+    // 清除之前可能残留的定时器
+    clearTimeout(evalPromptTimer);
+    clearTimeout(evalMainTimer);
+    clearTimeout(evalExtraTimer);
 
-        // 记录本次尝试
-        evalResults.push({
-            expected: expected,
-            decoded: decoded,
-            match: match,
-            confidence: data.confidence || 0,
-            step: evalTrialIndex + 1,
-            retry: evalRetryCount
-        });
+    // 1.5秒提示阶段
+    evalPromptTimer = setTimeout(() => {
+        if (!evalMode) return;
+        showIndicator = false;
+        document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 🧠 解码中... (2秒)`;
 
-        // 更新界面
-        const statusIcon = match ? '✅' : '❌';
-        document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | ${statusIcon} (解码: ${decoded}, ${confidence}%)`;
+        // 发送 eval_step
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "eval_step", direction: evalTarget }));
+            console.log(`[前端] 发送 eval_step, expected=${evalTarget}, 重试=${evalRetryCount}`);
+        } else {
+            console.error('[前端] WebSocket 未连接，无法发送 eval_step');
+            handleEvalResult({ match: false, decoded: 'ws_error', confidence: 0 });
+            return;
+        }
+        evalWaitingForResult = true;
+        evalTrialStartTime = Date.now();
 
-        console.log(`[评测] 步骤 ${evalTrialIndex+1}, 尝试 ${evalRetryCount+1}: 期望=${expected}, 解码=${decoded}, 匹配=${match}`);
-
-        if (match) {
-            // 匹配，移动角色
-            if (activeGame) {
-                activeGame.handleMove(expected);
-                activeGame.render(gameCtx);
+        // 主超时：5000ms（5秒）
+        evalMainTimer = setTimeout(() => {
+            if (evalWaitingForResult) {
+                console.warn('[前端] 等待 eval_result 超时，继续等待后端响应...');
+                // 额外1.5秒保护
+                evalExtraTimer = setTimeout(() => {
+                    if (evalWaitingForResult) {
+                        console.warn('[前端] 最终超时，强制失败');
+                        handleEvalResult({ match: false, decoded: 'timeout', confidence: 0 });
+                    }
+                }, 1500);
             }
-            // 进入下一步
+        }, 5000);
+    }, 1500);
+}
+
+    // ==================== 处理评测结果 ====================
+function handleEvalResult(data) {
+    // 移除基于 step 的去重逻辑
+    if (!evalMode) {
+        console.log('[前端] 评测模式未激活，忽略 eval_result');
+        return;
+    }
+
+    // 如果不在等待状态，忽略延迟到达的结果，防止状态错位
+    if (!evalWaitingForResult) {
+        console.warn('[前端] 收到 eval_result 但未在等待状态（可能超时后延迟到达），忽略');
+        return;
+    }
+
+    evalWaitingForResult = false;
+
+    // 清除所有定时器
+    clearTimeout(evalPromptTimer);
+    clearTimeout(evalMainTimer);
+    if (evalExtraTimer) {
+        clearTimeout(evalExtraTimer);
+        evalExtraTimer = null;
+    }
+
+    // 更新置信度条
+    if (data.all_confidences) {
+        updateConfidenceBars(data.all_confidences);
+    }
+
+    const match = data.match;
+    const decoded = data.decoded || '无';
+    const confidence = (data.confidence * 100).toFixed(1);
+    const expected = evalTarget;
+
+    // 记录结果（不再用 step 去重，每收到一次就记录）
+    evalResults.push({
+        expected: expected,
+        decoded: decoded,
+        match: match,
+        confidence: data.confidence || 0,
+        step: evalTrialIndex + 1,
+        retry: evalRetryCount
+    });
+
+    const statusIcon = match ? '✅' : '❌';
+    document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | ${statusIcon} (解码: ${decoded}, ${confidence}%)`;
+    console.log(`[评测] 步骤 ${evalTrialIndex+1}, 尝试 ${evalRetryCount+1}: 期望=${expected}, 解码=${decoded}, 匹配=${match}`);
+
+    if (match) {
+        if (activeGame) {
+            activeGame.handleMove(expected);
+            activeGame.render(gameCtx);
+        }
+        evalTrialIndex++;
+        evalRetryCount = 0;
+        clearTimeout(evalRestTimer);
+        evalRestTimer = setTimeout(() => {
+            if (evalMode) startNextEvalTrial();
+        }, 1000);
+    } else {
+        evalRetryCount++;
+        if (evalRetryCount >= DEMO_MAX_RETRIES) {
+            console.warn(`[评测] 步骤 ${evalTrialIndex+1} 跳过（超过重试上限 ${DEMO_MAX_RETRIES}）`);
+            document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} |⚠️ 跳过（超过重试上限）`;
             evalTrialIndex++;
             evalRetryCount = 0;
-            // 休息1秒后进入下一步
+            clearTimeout(evalRestTimer);
             evalRestTimer = setTimeout(() => {
                 if (evalMode) startNextEvalTrial();
             }, 1000);
         } else {
-            // 不匹配，重试
-            evalRetryCount++;
-            if (evalRetryCount >= DEMO_MAX_RETRIES) {
-                // 超过重试上限，跳过该步
-                console.warn(`[评测] 步骤 ${evalTrialIndex+1} 跳过（超过重试上限 ${DEMO_MAX_RETRIES}）`);
-                document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | ⚠️ 跳过（超过重试上限）`;
-                evalTrialIndex++;
-                evalRetryCount = 0;
-                evalRestTimer = setTimeout(() => {
-                    if (evalMode) startNextEvalTrial();
-                }, 1000);
-            } else {
-                // 自动重试
-                document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 🔄 重试 (${evalRetryCount}/${DEMO_MAX_RETRIES})`;
-                setTimeout(() => {
-                    if (evalMode) sendEvalTrialStart();
-                }, 500);  // 短暂延时后重试
-            }
+            document.getElementById('eval-info').innerHTML = `📊 步骤 ${evalTrialIndex+1}/${evalSequence.length} | 🔄 重试 (${evalRetryCount}/${DEMO_MAX_RETRIES})`;
+            clearTimeout(evalRestTimer);
+            evalRestTimer = setTimeout(() => {
+                if (evalMode) sendEvalTrialStart();
+            }, 500);
         }
     }
+}
 
     // ==================== 统一移动入口 ====================
-    function handleLocalMove(cmd) {
-        if (evalMode) return;  // 评测模式下键盘/外部命令不移动
+    function handleLocalMove(cmd, fromWebSocket = false) {
+        if (evalMode && !fromWebSocket) return;
         if (activeGame) {
             activeGame.handleMove(cmd);
             activeGame.render(gameCtx);
@@ -974,44 +992,39 @@
             if (currentMode === 'online' && realtimeActive) ws.send(JSON.stringify({type: "start_realtime"}));
         };
         ws.onmessage = (event) => {
-            try {
-                const data = JSON.parse(event.data);
-                if (data.type === "demo_result") {
-                    recordDemoStep(data);
-                }
-                else if (data.type === "trial_result") {
-                    handleEvalResult(data);  // 评测结果处理
-                }
-                else if (data.type === "realtime_command") {
-                    if (lastCmdSpan) lastCmdSpan.innerText = data.command;
-                    if (data.all_confidences) updateConfidenceBars(data.all_confidences);
-                    if (!demoActive && !evalMode) {
-                        handleLocalMove(data.command);
-                    }
-                }
-                else if (data.type === "offline_status") {
-                    // ignore
-                }
-                else if (data.type === "realtime_status") {
-                    // ignore
-                }
-                else if (data.command) {
-                    if (lastCmdSpan) lastCmdSpan.innerText = data.command;
-                    if (data.all_confidences) updateConfidenceBars(data.all_confidences);
-                    if (!demoActive && !evalMode) {
-                        handleLocalMove(data.command);
-                    }
-                }
-                else if (data.type === "eval_started") {
-                    console.log('[前端] 后端已进入评测模式');
-                }
-                else if (data.type === "trigger_ack") {
-                    console.log('[Trigger] 已发送:', data.code);
-                }
-            } catch (e) {
-                console.error('WebSocket 消息解析错误:', e);
+    try {
+        const data = JSON.parse(event.data);
+        console.log('[前端] 收到 WebSocket 消息:', data);
+        if (data.type === "demo_result") {
+            recordDemoStep(data);
+        } else if (data.type === "trial_result") {
+            handleEvalResult(data);
+        } else if (data.type === "eval_result") {      // ⭐ 新增
+            handleEvalResult(data);
+        } else if (data.type === "realtime_command") {
+            if (lastCmdSpan) lastCmdSpan.innerText = data.command;
+            if (data.all_confidences) updateConfidenceBars(data.all_confidences);
+            if (!evalMode && !demoActive) {
+                handleLocalMove(data.command, true);
             }
-        };
+        } else if (data.type === "eval_started") {
+            console.log('[前端] 后端已进入评测模式');
+        } else if (data.type === "trigger_ack") {
+            console.log('[Trigger] 已发送:', data.code);
+        } else if (data.type === "offline_status" || data.type === "realtime_status") {
+            // ignore
+        } else if (data.command) {
+            // 兼容旧格式
+            if (lastCmdSpan) lastCmdSpan.innerText = data.command;
+            if (data.all_confidences) updateConfidenceBars(data.all_confidences);
+            if (!evalMode && !demoActive) {
+                handleLocalMove(data.command, true);
+            }
+        }
+    } catch (e) {
+        console.error('WebSocket 消息解析错误:', e);
+    }
+};
         ws.onclose = () => {
             console.warn('WebSocket 断开，3秒后重连');
             updateWSStatus(false);
@@ -1048,7 +1061,6 @@
         if (!realtimeActive) return;
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({type: "stop_realtime"}));
         realtimeActive = false;
-        // 不停止刺激，由上层控制
         document.getElementById('btn-realtime-start').disabled = false;
         document.getElementById('btn-realtime-stop').disabled = true;
     }
@@ -1126,9 +1138,10 @@
         document.getElementById('btn-realtime-stop').addEventListener('click', stopRealtime);
 
         const evalStartBtn = document.getElementById('btn-eval-start');
-        const evalStopBtn = document.getElementById('btn-eval-stop');
-        if (evalStartBtn) evalStartBtn.addEventListener('click', () => startEvalMode());
-        if (evalStopBtn) evalStopBtn.addEventListener('click', stopEvalMode);
+if (evalStartBtn) evalStartBtn.addEventListener('click', () => {
+    // 在线评测，来源为 online
+    startEvalMode(null, 'online');
+});
 
         ['demo-log', 'demo-summary', 'demo-progress'].forEach(id => {
             const el = document.getElementById(id);
@@ -1141,7 +1154,6 @@
             }
         });
 
-        // 启动动画循环（默认静态）
         stimAnimationId = requestAnimationFrame(animateStim);
         stopStimuli();
     }
