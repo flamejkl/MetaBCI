@@ -23,9 +23,8 @@ class GrowingWindowDecoder:
         self.last_decision = None
         self.consecutive_count = 0
         self.sample_rate = SAMPLE_RATE
-        self.occipital_indices = OCCIPITAL_INDICES  # 你的枕区通道索引
+        self.occipital_indices = OCCIPITAL_INDICES
 
-        # 为了性能，预先提取模型长度列表
         self.model_lengths = sorted(self.models.keys())
 
     def feed(self, sample):
@@ -55,12 +54,9 @@ class GrowingWindowDecoder:
             return None, 0.0, L / self.sample_rate
 
         # 构建窗口：取前 L 个点（Growing Window）
-        # 注意：self.buffer 是 list of (channels,)，需要转置为 (channels, L)
         window_full = np.array(self.buffer[:L]).T   # (channels, L)
-        # 取该模型需要的长度（通常是最近 model_len 个点，但这里因为是 Growing，我们取整个窗口的末尾 model_len 个点）
-        # 然而对于 Growing Window，我们更希望使用前 model_len 个点（即刺激开始后的 model_len 点）
-        # 为了与训练一致，我们使用前 model_len 个点
-        window_trim = window_full[:, :model_len]   # 从开头取
+        # 取该模型需要的长度（使用前 model_len 个点）
+        window_trim = window_full[:, :model_len]
 
         # 提取枕区通道（如果 window 已经是枕区，可以省略）
         if window_trim.shape[0] != len(self.occipital_indices):
@@ -87,6 +83,20 @@ class GrowingWindowDecoder:
                 return decision, max_score, L / self.sample_rate
         else:
             self.history.clear()
+
+        # ========== 新增：强制输出逻辑 ==========
+        # 如果累积长度达到最大限制，强制输出（使用最长模型）
+        if L >= self.max_len:
+            # 使用最长模型（500点）进行预测
+            window_force = np.array(self.buffer[:self.max_len]).T
+            if window_force.shape[0] != len(self.occipital_indices):
+                window_force = window_force[self.occipital_indices, :]
+            window_force = self._preprocess(window_force)
+            scores_force = self.models[self.max_len].transform(window_force[np.newaxis, ...])[0]
+            decision_force = np.argmax(scores_force)
+            conf_force = np.max(scores_force)
+            # 返回强制决策，且标记为超时（可在外部判断）
+            return decision_force, conf_force, L / self.sample_rate
 
         return None, 0.0, L / self.sample_rate
 

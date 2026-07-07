@@ -670,7 +670,7 @@
         }
 
         if (match) {
-            handleLocalMove(expected);
+            handleLocalMove(expected, true);
             if (demoCurrentStep >= demoPath.length - 1) {
                 setTimeout(() => {
                     if (demoActive) stopDemo();
@@ -719,8 +719,23 @@
     evalResults = [];
     evalRetryCount = 0;
 
+    // --- 新增：离线演示初始化 ---
+    if (source === 'offline') {
+        demoActive = true;
+        demoPath = sequence;
+        demoCurrentStep = 0;
+        demoActualSteps = [];
+        demoStopFlag = false;
+        demoRetryCount = 0;
+        if (demoLogDiv) demoLogDiv.innerHTML = '演示开始...\n';
+        if (demoProgressDiv) demoProgressDiv.innerHTML = `步骤: 0 / ${demoPath.length}`;
+        if (demoSummaryDiv) demoSummaryDiv.innerHTML = `标准路径长度: ${demoPath.length} | 实际步数: 0 | 正确率: -`;
+        document.getElementById('btn-demo-start').disabled = true;
+        document.getElementById('btn-demo-stop').disabled = false;
+    }
+
     // 根据当前模式决定发送的消息类型
-    const msgType = (currentMode === 'online') ? "start_eval" : "start_offline_sim";
+    const msgType = (source === 'offline') ? "start_offline_sim" : "start_eval";
     if (ws && ws.readyState === WebSocket.OPEN) {
         ws.send(JSON.stringify({ type: msgType }));
         console.log(`[前端] 发送 ${msgType}`);
@@ -750,11 +765,15 @@
         } catch (e) {
             console.warn('[前端] 启动评测失败:', e.message);
             alert('启动评测失败: ' + e.message);
-            evalMode = false;   // 重置状态
-            document.getElementById('btn-eval-start').disabled = false;
-            document.getElementById('btn-eval-stop').disabled = true;
-            document.getElementById('btn-demo-start').disabled = false;
-            document.getElementById('btn-demo-stop').disabled = true;
+            evalMode = false;
+            if (source === 'offline') {
+                demoActive = false;
+                document.getElementById('btn-demo-start').disabled = false;
+                document.getElementById('btn-demo-stop').disabled = true;
+            } else {
+                document.getElementById('btn-eval-start').disabled = false;
+                document.getElementById('btn-eval-stop').disabled = true;
+            }
             return;
         }
     } else {
@@ -764,12 +783,15 @@
 
     if (!stimFlashing) startStimuli();
 
-    document.getElementById('eval-info').style.display = 'block';
-    document.getElementById('btn-eval-start').disabled = true;
-    document.getElementById('btn-eval-stop').disabled = false;
-    document.getElementById('eval-info').innerHTML = `评测准备就绪，共 ${sequence.length} 步`;
-    document.getElementById('btn-demo-start').disabled = true;
-    document.getElementById('btn-demo-stop').disabled = false;
+    // 显示对应 UI
+    if (source === 'offline') {
+        // 离线演示 UI 已由上面初始化，无需额外操作
+    } else {
+        document.getElementById('eval-info').style.display = 'block';
+        document.getElementById('btn-eval-start').disabled = true;
+        document.getElementById('btn-eval-stop').disabled = false;
+        document.getElementById('eval-info').innerHTML = `评测准备就绪，共 ${sequence.length} 步`;
+    }
 
     setTimeout(() => { if (evalMode) startNextEvalTrial(); }, 500);
 }

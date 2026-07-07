@@ -1,6 +1,6 @@
 # websocket_server.py
 print("WS FILE =", __file__, flush=True)
-print("🔥🔥🔥 修正版 websocket_server.py 已加载 🔥🔥🔥")
+print("🔥🔥🔥 统一管道版 websocket_server.py 已加载 🔥🔥🔥")
 import sys
 sys.path.insert(0, r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI")
 
@@ -14,12 +14,13 @@ import joblib
 import os
 import glob
 import traceback
-from collections import Counter
+from collections import deque
+from typing import Optional, Callable, Awaitable, Tuple, Any
 from config import (
     WS_HOST, WS_PORT, MODEL_PATH, NEURACLE_IP, NEURACLE_PORT,
     OFFLINE_DATA_ROOT, WINDOW_LEN_SAMPLES, ONLINE_SAMPLE_RATE,
     RAW_WINDOW_SAMPLES, VOTER_DECAY, VOTER_LOCK_FRAMES,
-    VOTER_LOCK_DURATION, VOTER_THRESHOLD,DEMO_DATA_ROOT,
+    VOTER_LOCK_DURATION, VOTER_THRESHOLD, DEMO_DATA_ROOT,
     FIXED_WINDOW_MODE
 )
 from online_decode import DynamicStoppingDecoder
@@ -34,17 +35,19 @@ def force_log(msg):
     sys.stderr.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
     sys.stderr.flush()
 
-# 强制刷新的日志函数
+
 def log(msg):
     print(f"[{time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
-# =========================== 离线数据生成器 ===========================
+
+# =========================== 离线数据生成器（修改：存储文件名） ===========================
 class OfflineDataGenerator:
-    def __init__(self, data_root, window_samples=500, slide_step=25, occipital_indices=None):
+    def __init__(self, data_root, window_samples=500, slide_step=25, occipital_indices=None, offset_only=True):
         self.data_root = data_root
         self.window_samples = window_samples
         self.slide_step = slide_step
         self.occipital_indices = occipital_indices if occipital_indices is not None else [2,3,4,5,6,7,8,9]
+        self.offset_only = offset_only
         self.trials_by_label = {0: [], 1: [], 2: [], 3: []}
         self._load_all_trials()
 
@@ -59,11 +62,13 @@ class OfflineDataGenerator:
                 if "hw_trial_0000.npy" in f:
                     log(f"[跳过] 已知异常试次: {f}")
                     continue
+                if self.offset_only and "offset000" not in f:
+                    continue
                 data = np.load(f)
                 log(f"[加载] {f} shape={data.shape}")
-                # 注意：这里已经提取枕区通道
                 data = data[self.occipital_indices, :]
-                self.trials_by_label[label].append((data, label))
+                # 存储 (数据, 标签, 文件名)
+                self.trials_by_label[label].append((data, label, os.path.basename(f)))
         self.trials = []
         for label in range(4):
             self.trials.extend(self.trials_by_label[label])
@@ -71,22 +76,18 @@ class OfflineDataGenerator:
             raise RuntimeError("未加载到任何离线试次，请检查 data_self 目录")
         log(f"离线数据加载完成，共 {len(self.trials)} 个试次")
 
-    def get_trial_generator_by_label(self, label):
+    def get_full_trial_generator_by_label(self, label):
         trials = self.trials_by_label.get(label, [])
         if not trials:
             raise ValueError(f"标签 {label} 没有数据")
         idx = 0
         while True:
-            data, lbl = trials[idx % len(trials)]
+            data, lbl, fname = trials[idx % len(trials)]
             idx += 1
-            n_samples = data.shape[1]
-            for start in range(0, n_samples - self.window_samples + 1, self.slide_step):
-                window = data[:, start:start+self.window_samples]
-                yield window, lbl, (start + self.window_samples >= n_samples)
-            if n_samples >= self.window_samples:
-                yield data[:, -self.window_samples:], lbl, True
+            yield data, lbl, fname   # 返回文件名
 
-# =========================== 模拟数据生成器 ===========================
+
+# =========================== 模拟数据生成器（未改动） ===========================
 class SimulatedDataGenerator:
     def __init__(self, srate=250, n_channels=14, target_sequence=None,
                  switch_interval=2.0, window_len=WINDOW_LEN_SAMPLES):
@@ -116,7 +117,152 @@ class SimulatedDataGenerator:
             self.t += dt
         return window
 
-# =========================== WebSocket 服务器主类 ===========================
+
+# =========================== 连续流解码引擎（修改：支持额外信息） ===========================
+class ContinuousStreamingEngine:
+    class State:
+        IDLE = "IDLE"
+        DEMO = "DEMO"
+        EVAL = "EVAL"
+        REALTIME = "REALTIME"
+
+    def __init__(self, model, decoder, occipital_indices, sample_rate=250):
+        self.model = model
+        self.decoder = decoder
+        self.occipital_indices = occipital_indices
+        self.sample_rate = sample_rate
+
+        self.state = self.State.IDLE
+        self._running = False
+        self._loop_task: Optional[asyncio.Task] = None
+        self._stop_event = asyncio.Event()
+
+        # 数据源回调：返回 (data_chunk, is_new_trial, extra_info)
+        self.data_source_callback: Optional[Callable[[], Tuple[Optional[np.ndarray], bool, dict]]] = None
+        self.emit_callback: Optional[Callable[[dict], Awaitable[None]]] = None
+
+        self.context = {
+            "expected_dir": None,
+            "msg_type": None,
+            "trial_started": False,
+        }
+        self.current_extra = {}   # 当前试次的额外信息（如文件名）
+
+        self.frame_count = 0
+        self.decision_count = 0
+        self.last_decision_time = 0.0
+
+        log("[Engine] 连续流解码引擎初始化完成")
+
+    async def _continuous_loop(self):
+        self._running = True
+        self._stop_event.clear()
+        log("[Engine] 连续解码循环启动")
+
+        while self._running:
+            loop_start = time.perf_counter()
+
+            if self.data_source_callback:
+                result = self.data_source_callback()
+                if result is not None:
+                    data_chunk, is_new_trial, extra_info = result
+                    if data_chunk is not None:
+                        if is_new_trial and self.state in (self.State.DEMO, self.State.EVAL):
+                            self.decoder.reset()
+                            self.current_extra = extra_info or {}
+                            log("[Engine] 新试次开始，decoder 已重置")
+                        for sample in data_chunk:
+                            if sample.shape[0] == 14:
+                                sample = sample[self.occipital_indices]
+                            decision, conf, current_time = self.decoder.feed(sample)
+                            if decision is not None and self.state != self.State.IDLE:
+                                await self._on_decision(decision, conf, current_time)
+
+            elapsed = time.perf_counter() - loop_start
+            sleep_time = max(0, 0.004 - elapsed)
+            await asyncio.sleep(sleep_time)
+
+        log("[Engine] 连续解码循环退出")
+
+    async def _on_decision(self, decision, conf, current_time):
+        self.decision_count += 1
+        self.last_decision_time = current_time
+
+        if self.state == self.State.REALTIME:
+            command = ["up", "down", "left", "right"][decision]
+            msg = {
+                "type": "realtime_command",
+                "command": command,
+                "confidence": conf,
+                "all_confidences": [0.0] * 4
+            }
+            if self.emit_callback:
+                await self.emit_callback(msg)
+
+        elif self.state in (self.State.DEMO, self.State.EVAL):
+            expected = self.context.get("expected_dir")
+            msg_type = self.context.get("msg_type", "eval_result")
+            if expected is not None:
+                decoded_dir = ["up", "down", "left", "right"][decision]
+                match = (decoded_dir == expected)
+                msg = {
+                    "type": msg_type,
+                    "decoded": decoded_dir,
+                    "expected": expected,
+                    "match": match,
+                    "timeout": False,
+                    "confidence": conf,
+                    "all_confidences": [0.0] * 4
+                }
+                # 添加文件名（如果有）
+                if 'filename' in self.current_extra:
+                    msg['filename'] = self.current_extra['filename']
+                if self.emit_callback:
+                    await self.emit_callback(msg)
+                self.context["expected_dir"] = None
+                self.context["msg_type"] = None
+
+        if self.state != self.State.REALTIME:
+            self.decoder.reset()
+
+    async def start(self):
+        if self._running:
+            log("[Engine] 引擎已在运行")
+            return
+        self._loop_task = asyncio.create_task(self._continuous_loop())
+
+    async def stop(self):
+        if not self._running:
+            return
+        self._running = False
+        self.state = self.State.IDLE
+        self.context = {"expected_dir": None, "msg_type": None}
+        if self._loop_task:
+            self._loop_task.cancel()
+            try:
+                await self._loop_task
+            except asyncio.CancelledError:
+                pass
+            self._loop_task = None
+        self.decoder.reset()
+        log("[Engine] 引擎已停止，状态 IDLE")
+
+    def set_mode(self, state: str, expected_dir=None, msg_type=None):
+        self.state = state
+        self.context["expected_dir"] = expected_dir
+        self.context["msg_type"] = msg_type
+        log(f"[Engine] 模式切换为: {state}")
+
+    # ===== 内置数据源回调（用于真实采集） =====
+    def _next_acq_sample(self):
+        """返回 (sample, False, {})，用于实时流"""
+        sample = self.acq.get_latest_sample() if hasattr(self, 'acq') else None
+        if sample is None:
+            return None, False, {}
+        return sample[np.newaxis, :], False, {}
+
+
+# =========================== WebSocket 服务器主类（修改数据源回调） ===========================
 class WebSocketServer:
     _instance = None
     _lock = threading.Lock()
@@ -139,63 +285,18 @@ class WebSocketServer:
         self.thread = None
         self._stop_event = threading.Event()
         self.mode = 'offline'
-        self.realtime_thread = None
-        self.realtime_stop_flag = None
-        self.decoder = None
-        self.model = None
-        self.acq = None
-        self.simulator = None
-        self.voter = None
-
-        self.eval_task = None
-        self.gw_decoder = None
 
         self.engine = None
-
-        # 评测模式相关
-        self.eval_mode = False
-        self.eval_active = False
-        self.eval_lock = asyncio.Lock()
-        self.eval_result_ready = threading.Event()
-        self.eval_votes = []
-        self.eval_start_time = 0.0
-        self.eval_duration = 2.0
-        self.eval_expected_dir = None
-        self.eval_decoded = None
-
-        # 用于固定窗口模式的状态
-        self.use_real = False
-        self.occipital_indices = [2, 3, 4, 5, 6, 7, 8, 9]
-        self.offline_mode = False
+        self.model = None
+        self.gw_decoder = None
+        self.acq = None
         self.offline_gen = None
 
-    # ========== 统一状态重置方法 ==========
-    def reset_eval_state(self):
-        """重置所有评测/演示相关状态（安全清理）"""
-        self.eval_active = False
-        self.eval_mode = False
-        # 取消正在运行的 eval_task（如果有）
-        if self.eval_task and not self.eval_task.done():
-            self.eval_task.cancel()
-        self.eval_task = None
-        # 如果处于离线模式，停止实时解码线程
-        if self.offline_mode:
-            self._stop_realtime_decoding()
-        log("[STATE] eval state reset")
+        # 离线演示专用：当前试次生成器
+        self._demo_gen = None
 
-    def _init_gw_decoder(self):
-        """初始化 Growing Window 解码器（延迟加载）"""
-        if self.gw_decoder is None:
-            try:
-                from growing_window_decoder import GrowingWindowDecoder
-                self.gw_decoder = GrowingWindowDecoder()
-                log("✅ Growing Window 解码器已初始化")
-            except Exception as e:
-                log(f"❌ Growing Window 解码器初始化失败: {e}")
-                self.gw_decoder = None
-        return self.gw_decoder
-
-    def _load_model(self):
+    # ========== 统一初始化 ==========
+    def _load_model_and_engine(self):
         if self.model is None:
             try:
                 self.model = joblib.load(MODEL_PATH)
@@ -203,362 +304,95 @@ class WebSocketServer:
             except Exception as e:
                 log(f"❌ 模型加载失败: {e}")
                 self.model = None
-
-    # ========== 评测任务（统一入口，支持 msg_type 参数） ==========
-    async def _run_eval_fixed_window(self, expected_dir, websocket, msg_type="eval_result"):
-        """
-        执行 Growing Window 评测或演示。
-        msg_type: "eval_result" 或 "demo_result"，决定返回消息类型。
-        """
-        self.eval_active = True
-        try:
-            log(f"[Eval] 开始评测，期望方向={expected_dir}, msg_type={msg_type}")
-
-            # 初始化解码器
-            decoder = self._init_gw_decoder()
-            if decoder is None:
-                await websocket.send(json.dumps({
-                    "type": msg_type,
-                    "decoded": None,
-                    "expected": expected_dir,
-                    "match": False,
-                    "timeout": True,
-                    "confidence": 0.0,
-                    "all_confidences": [0.0] * 4
-                }))
                 return
 
-            decoder.reset()
-            max_wait = 3.5
-            start_time = time.time()
-
-            # ----- 离线模式处理 -----
-            if self.offline_mode and self.offline_gen is not None:
-                label_map = {"up": 0, "down": 1, "left": 2, "right": 3}
-                label = label_map.get(expected_dir, 0)
-                try:
-                    gen = self.offline_gen.get_trial_generator_by_label(label)
-                    data, true_label, _ = next(gen)
-                    # data 已经是枕区通道 (8, 500)
-                    for idx in range(data.shape[1]):
-                        sample = data[:, idx]
-                        decision, conf, current_time = decoder.feed(sample)
-                        if decision is not None:
-                            decoded_dir = ["up", "down", "left", "right"][decision]
-                            match = (decoded_dir == expected_dir)
-                            log(f"[Eval] 提前停止于 {current_time:.2f}s, 决策={decoded_dir}, 匹配={match}")
-                            await websocket.send(json.dumps({
-                                "type": msg_type,
-                                "decoded": decoded_dir,
-                                "expected": expected_dir,
-                                "match": match,
-                                "timeout": False,
-                                "confidence": conf,
-                                "all_confidences": [0.0] * 4
-                            }))
-                            return
-                        if time.time() - start_time > max_wait:
-                            break
-
-                    # 未提前停止，强制 2.0s 输出
-                    log("[Eval] 未提前停止，强制 2.0s 输出")
-                    window_final = data[:, :500]
-                    if window_final.shape[1] < 500:
-                        window_final = data
-                    # 注意：data 已是枕区，不再使用 self.occipital_indices 索引
-                    window_final = window_final - np.mean(window_final, axis=1, keepdims=True)
-                    model = decoder.models[500]
-                    scores = model.transform(window_final[np.newaxis, ...])[0]
-                    decision = np.argmax(scores)
-                    conf = np.max(scores)
-                    decoded_dir = ["up", "down", "left", "right"][decision]
-                    match = (decoded_dir == expected_dir)
-                    await websocket.send(json.dumps({
-                        "type": msg_type,
-                        "decoded": decoded_dir,
-                        "expected": expected_dir,
-                        "match": match,
-                        "timeout": True,
-                        "confidence": conf,
-                        "all_confidences": [0.0] * 4
-                    }))
-                    return
-                except StopIteration:
-                    log("[Eval] 离线数据生成器无可用试次")
-                except Exception as e:
-                    log(f"[Eval] 离线数据异常: {e}")
-
-            # ----- 在线模式（真实设备或模拟器）-----
-            while time.time() - start_time < max_wait:
-                try:
-                    if self.use_real and self.acq:
-                        sample = await asyncio.to_thread(self.acq.get_latest_sample)
-                        if sample is None:
-                            await asyncio.sleep(0.001)
-                            continue
-                    elif self.simulator is not None:
-                        sample = self.simulator.get_sample()
-                    else:
-                        break
-                except Exception as e:
-                    log(f"[Eval] 获取样本异常: {e}")
-                    await asyncio.sleep(0.001)
-                    continue
-
-                decision, conf, current_time = decoder.feed(sample)
-                if decision is not None:
-                    decoded_dir = ["up", "down", "left", "right"][decision]
-                    match = (decoded_dir == expected_dir)
-                    log(f"[Eval] 提前停止于 {current_time:.2f}s, 决策={decoded_dir}, 匹配={match}")
-                    await websocket.send(json.dumps({
-                        "type": msg_type,
-                        "decoded": decoded_dir,
-                        "expected": expected_dir,
-                        "match": match,
-                        "timeout": False,
-                        "confidence": conf,
-                        "all_confidences": [0.0] * 4
-                    }))
-                    return
-                if time.time() - start_time > max_wait:
-                    break
-
-            # 超时处理
-            log("[Eval] 超时，强制输出")
-            if self.use_real and self.acq:
-                raw_window = await asyncio.to_thread(self.acq.get_latest_samples, 500)
-                if raw_window is not None:
-                    window = raw_window[self.occipital_indices, :]
-                    window = window - np.mean(window, axis=1, keepdims=True)
-                    model = decoder.models[500]
-                    scores = model.transform(window[np.newaxis, ...])[0]
-                    decision = np.argmax(scores)
-                    conf = np.max(scores)
-                    decoded_dir = ["up", "down", "left", "right"][decision]
-                    match = (decoded_dir == expected_dir)
-                    await websocket.send(json.dumps({
-                        "type": msg_type,
-                        "decoded": decoded_dir,
-                        "expected": expected_dir,
-                        "match": match,
-                        "timeout": True,
-                        "confidence": conf,
-                        "all_confidences": [0.0] * 4
-                    }))
-                    return
-
-            # 兜底
-            await websocket.send(json.dumps({
-                "type": msg_type,
-                "decoded": None,
-                "expected": expected_dir,
-                "match": False,
-                "timeout": True,
-                "confidence": 0.0,
-                "all_confidences": [0.0] * 4
-            }))
-
-        except Exception as e:
-            log(f"[Eval] ❌ 异常: {e}")
-            try:
-                await websocket.send(json.dumps({
-                    "type": msg_type,
-                    "decoded": None,
-                    "expected": expected_dir,
-                    "match": False,
-                    "timeout": True,
-                    "confidence": 0.0,
-                    "all_confidences": [0.0] * 4
-                }))
-            except:
-                pass
-        finally:
-            self.eval_active = False
-            self.eval_task = None
-            log("[Eval] 状态已重置")
-
-    # ========== 实时解码启动（返回 bool） ==========
-    async def _start_realtime_decoding(self, eval_mode=False, offline_mode=False):
-        log(f"[START_DECODING] 进入函数, eval_mode={eval_mode}, offline_mode={offline_mode}")
-
-        if eval_mode:
-            self.eval_mode = True
-            self.eval_active = False
-            self.eval_votes = []
-            self.eval_result_ready.clear()
-            self.eval_decoded = None
-            force_log("设置 eval_mode = True，调用栈:")
-            traceback.print_stack(file=sys.stderr)
-        else:
-            self.eval_mode = False
-
-        if self.realtime_thread and self.realtime_thread.is_alive():
-            log("[START_DECODING] 解码线程已运行，直接返回 True")
-            return True
-
-        self.realtime_stop_flag = threading.Event()
-        self._load_model()
-        if self.model is None:
-            log("[START_DECODING] 模型加载失败，返回 False")
-            self.eval_mode = False
-            return False
-
-        self.offline_mode = offline_mode
-
-        if not eval_mode:
+        if self.engine is None:
             self._init_gw_decoder()
             if self.gw_decoder is None:
-                log("[START_DECODING] Growing Window 解码器初始化失败")
-                self.eval_mode = False
-                return False
-            else:
-                self.gw_decoder.reset()
-                log("[START_DECODING] Growing Window 解码器已就绪")
-
-        self.offline_gen = None
-        if offline_mode:
-            try:
-                self.offline_gen = OfflineDataGenerator(
-                    data_root=DEMO_DATA_ROOT,
-                    window_samples=WINDOW_LEN_SAMPLES,
-                    slide_step=25,
-                    occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9]
-                )
-                log("[START_DECODING] 离线数据生成器初始化成功")
-            except Exception as e:
-                log(f"[START_DECODING] 离线数据生成器初始化失败: {e}")
-                self.eval_mode = False
-                return False
-
-        use_real = False
-        if not offline_mode:
-            try:
-                self.acq = DataAcquisition(
-                    mode='real',
-                    neuracle_ip=NEURACLE_IP,
-                    neuracle_port=NEURACLE_PORT,
-                    srate=ONLINE_SAMPLE_RATE,
-                    num_chans=14
-                )
-                log("[START_DECODING] DataAcquisition 实例创建完毕，尝试连接...")
-                connected = await asyncio.to_thread(self.acq.connect)
-                if connected:
-                    await asyncio.to_thread(self.acq.start_acquisition)
-                    await asyncio.to_thread(self.acq.reset_buffer)
-                    use_real = True
-                    log("✅ 真实 EEG 设备连接成功，开始采集")
-                else:
-                    log("❌ 真实 EEG 设备连接失败")
-                    self.acq = None
-            except Exception as e:
-                log(f"❌ 真实 EEG 设备连接异常: {e}")
-                self.acq = None
-            if not use_real:
-                log("[START_DECODING] 真实设备不可用，返回 False")
-                self.eval_mode = False
-                return False
-        else:
-            self.acq = None
-
-        self.use_real = use_real
-        self.occipital_indices = [2, 3, 4, 5, 6, 7, 8, 9]
-
-        if not eval_mode:
-            self.eval_mode = False
-
-        def decode_loop():
-            decoder = self.gw_decoder
-            if decoder is None:
-                log("❌ 解码器未初始化，无法启动实时循环")
+                log("❌ Growing Window 解码器初始化失败")
                 return
-            decoder.reset()
-            acq = self.acq
-            use_real = self.use_real
-            last_decision_time = -1
-            log("[实时] Growing Window 解码循环已启动")
-            while not self.realtime_stop_flag.is_set():
-                try:
-                    if use_real and acq:
-                        sample = acq.get_latest_sample()
-                        if sample is None:
-                            time.sleep(0.001)
-                            continue
-                    else:
-                        time.sleep(0.001)
-                        continue
-                except Exception as e:
-                    log(f"获取样本异常: {e}")
-                    time.sleep(0.001)
-                    continue
+            self.engine = ContinuousStreamingEngine(
+                model=self.model,
+                decoder=self.gw_decoder,
+                occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9]
+            )
+            self.engine.emit_callback = self._send_websocket
+            # 注入 acq 引用供回调使用
+            self.engine.acq = self.acq
+            log("✅ 连续流引擎已创建")
 
-                decision, conf, current_time = decoder.feed(sample)
-                if decision is not None and current_time != last_decision_time:
-                    last_decision_time = current_time
-                    command = ["up", "down", "left", "right"][decision]
-                    log(f"[实时] 决策: {command}, 置信度: {conf:.3f}, 时间: {current_time:.2f}s")
-                    msg = {
-                        "type": "realtime_command",
-                        "command": command,
-                        "confidence": conf,
-                        "all_confidences": [0.0] * 4
-                    }
-                    asyncio.run_coroutine_threadsafe(
-                        self._broadcast(json.dumps(msg)),
-                        self.loop
-                    )
-            log("[实时] 解码循环已退出")
+    def _init_gw_decoder(self):
+        if self.gw_decoder is None:
+            try:
+                self.gw_decoder = GrowingWindowDecoder()
+                log("✅ Growing Window 解码器已初始化")
+            except Exception as e:
+                log(f"❌ Growing Window 解码器初始化失败: {e}")
+                self.gw_decoder = None
+        return self.gw_decoder
 
-        self.realtime_thread = threading.Thread(target=decode_loop, daemon=True)
-        self.realtime_thread.start()
-        log("[START_DECODING] 实时解码线程已启动，返回 True")
-        return True
+    def _connect_acq(self):
+        if self.acq is not None:
+            return True
+        try:
+            self.acq = DataAcquisition(
+                mode='real',
+                neuracle_ip=NEURACLE_IP,
+                neuracle_port=NEURACLE_PORT,
+                srate=ONLINE_SAMPLE_RATE,
+                num_chans=14
+            )
+            connected = self.acq.connect()
+            if connected:
+                self.acq.start_acquisition()
+                self.acq.reset_buffer()
+                log("✅ 真实 EEG 设备连接成功")
+                # 更新引擎的acq引用
+                if self.engine:
+                    self.engine.acq = self.acq
+                return True
+            else:
+                log("❌ 真实 EEG 设备连接失败")
+                self.acq = None
+                return False
+        except Exception as e:
+            log(f"❌ 真实 EEG 设备连接异常: {e}")
+            self.acq = None
+            return False
 
-    # ========== 停止解码 ==========
-    def _stop_realtime_decoding(self):
-        force_log("进入 _stop_realtime_decoding，调用栈:")
-        traceback.print_stack(file=sys.stderr)
-        log("[STOP_DECODING] 开始停止解码")
-        if self.realtime_stop_flag:
-            self.realtime_stop_flag.set()
-        if self.realtime_thread:
-            self.realtime_thread.join(timeout=2)
-            self.realtime_thread = None
+    # ========== WebSocket 发送回调 ==========
+    async def _send_websocket(self, msg):
+        await self._broadcast(json.dumps(msg))
+
+    # ========== 统一停止（异步） ==========
+    async def _stop_all(self):
+        force_log("进入 _stop_all (async)")
+        if self.engine:
+            await self.engine.stop()
         if self.acq:
             self.acq.stop_acquisition()
             self.acq = None
-        self.decoder = None
-        self.simulator = None
-        self.voter = None
-        self.eval_mode = False
-        force_log("设置 eval_mode = False (在 _stop_realtime_decoding 中)")
-        self.eval_active = False
-        self.eval_decoded = None
-        log("实时解码已停止")
+        self.offline_gen = None
+        self._demo_gen = None
+        log("[STOP] 所有组件已停止")
 
-    # ========== 评测步骤控制（滑动窗口模式用） ==========
-    def start_eval_step(self, expected_dir):
-        if not self.eval_mode or self.realtime_thread is None or not self.realtime_thread.is_alive():
-            return False
-        if self.eval_active:
-            return False
-        with self.eval_lock:
-            self.eval_votes = []
-        if self.voter:
-            self.voter.reset()
-        self.eval_active = True
-        self.eval_start_time = time.time()
-        self.eval_expected_dir = expected_dir
-        self.eval_decoded = None
-        self.eval_result_ready.clear()
-        log(f"评测步骤开始，期望方向: {expected_dir}")
-        return True
-
-    def wait_eval_result(self, timeout=3.0):
-        if self.eval_result_ready.wait(timeout):
-            return self.eval_decoded, self.eval_expected_dir
-        else:
-            self.eval_active = False
-            return None, self.eval_expected_dir
+    # ========== 离线演示数据源回调（修改：返回三元组） ==========
+    def _get_demo_sample(self):
+        """
+        由引擎调用，返回 (data_chunk, is_new_trial, extra_info)
+        每次 eval_step 设置 _demo_gen，本函数读取一个试次后立即清空，
+        确保每个步骤只使用一个试次。
+        """
+        if self._demo_gen is not None:
+            try:
+                data, label, fname = next(self._demo_gen)  # 现在返回三个值
+                self._demo_gen = None  # 只用一次
+                log(f"[Demo] 获取试次，shape={data.shape}, label={label}, file={fname}")
+                return data.T, True, {'filename': fname}   # 携带文件名
+            except StopIteration:
+                self._demo_gen = None
+                return None, False, {}
+        return None, False, {}
 
     # ========== WebSocket 消息处理 ==========
     async def _handler(self, websocket):
@@ -572,126 +406,142 @@ class WebSocketServer:
                     msg_type = data.get("type")
                     log(f"[HANDLER] 收到消息类型: {msg_type}")
 
-                    if msg_type == "stop_demo":
-                        # 重置所有评测/演示状态
-                        self.reset_eval_state()
-                        await websocket.send(json.dumps({"type": "offline_status", "status": "stopped"}))
-                        log("[HANDLER] 已停止演示")
+                    # ---------- 停止命令 ----------
+                    if msg_type in ("stop_demo", "stop_eval", "stop_realtime"):
+                        await self._stop_all()
+                        await websocket.send(json.dumps({"type": "status", "status": "stopped"}))
                         continue
 
+                    # ---------- 模式切换 ----------
                     if msg_type == "mode_switch":
                         new_mode = data.get("mode")
                         if new_mode in ["online", "offline"]:
                             self.mode = new_mode
                             force_log(f"模式切换为 {self.mode}")
-                            if self.mode == "offline" and self.realtime_thread and self.realtime_thread.is_alive():
-                                force_log("切换到 offline，即将调用 _stop_realtime_decoding")
-                                self._stop_realtime_decoding()
+                            if self.mode == "offline":
+                                await self._stop_all()
                             await websocket.send(json.dumps({"type": "mode_switched", "mode": self.mode}))
                         continue
 
-                    if msg_type == "demo_step":
-                        if self.engine and self.engine.state == ContinuousStreamingEngine.State.DEMO:
-                            expected_dir = data.get("direction")
-                            self.engine.context["expected_dir"] = expected_dir
-                            self.engine.context["msg_type"] = "demo_result"
-                            log(f"[HANDLER] 设置 DEMO 期望: {expected_dir}")
-                        else:
-                            await websocket.send(json.dumps({"type": "error", "message": "演示未运行"}))
-                        continue
-
+                    # ---------- 离线演示启动 ----------
                     if msg_type == "start_offline_sim":
-                        self._stop_all()
-                        # 初始化 engine (如果还没有)
+                        await self._stop_all()
+                        self._load_model_and_engine()
                         if self.engine is None:
-                            self._load_model()
-                            self._init_gw_decoder()
-                            self.engine = ContinuousStreamingEngine(
-                                model=self.model,
-                                decoder=self.gw_decoder,
-                                occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9]
-                            )
-                            self.engine.emit_callback = self._send_websocket
+                            await websocket.send(json.dumps({"type": "eval_error", "message": "引擎初始化失败"}))
+                            continue
 
-                        # 设置数据源
-                        self.offline_gen = OfflineDataGenerator(...)
-                        self.engine.set_demo_source(self.offline_gen)
+                        try:
+                            self.offline_gen = OfflineDataGenerator(
+                                data_root=DEMO_DATA_ROOT,
+                                window_samples=WINDOW_LEN_SAMPLES,
+                                slide_step=25,
+                                occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9],
+                                offset_only=True
+                            )
+                        except Exception as e:
+                            log(f"离线生成器初始化失败: {e}")
+                            await websocket.send(json.dumps({"type": "eval_error", "message": str(e)}))
+                            continue
+
+                        self.engine.data_source_callback = self._get_demo_sample
                         self.engine.set_mode(ContinuousStreamingEngine.State.DEMO)
                         await self.engine.start()
                         await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
                         continue
 
+                    # ---------- 演示步骤（demo_step 兼容） ----------
+                    if msg_type == "demo_step":
+                        if self.engine and self.engine.state == ContinuousStreamingEngine.State.DEMO:
+                            expected_dir = data.get("direction")
+                            label = {"up":0, "down":1, "left":2, "right":3}[expected_dir]
+                            self._demo_gen = self.offline_gen.get_full_trial_generator_by_label(label)
+                            self.engine.decoder.reset()
+                            self.engine.context["expected_dir"] = expected_dir
+                            self.engine.context["msg_type"] = "demo_result"
+                            log(f"[HANDLER] 设置 DEMO 期望: {expected_dir} (demo_step)")
+                        else:
+                            await websocket.send(json.dumps({"type": "error", "message": "演示未运行"}))
+                        continue
+
+                    # ---------- 评测步骤（同时支持离线演示） ----------
+                    if msg_type == "eval_step":
+                        if self.engine is None:
+                            await websocket.send(json.dumps({"type": "error", "message": "引擎未初始化"}))
+                            continue
+                        if self.engine.state not in (ContinuousStreamingEngine.State.DEMO,
+                                                     ContinuousStreamingEngine.State.EVAL):
+                            await websocket.send(json.dumps({"type": "error", "message": "未处于演示或评测模式"}))
+                            continue
+
+                        expected_dir = data.get("direction")
+                        if expected_dir not in ["up", "down", "left", "right"]:
+                            await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
+                            continue
+
+                        self.engine.decoder.reset()
+                        self.engine.context["expected_dir"] = expected_dir
+                        # 根据状态决定 msg_type
+                        if self.engine.state == ContinuousStreamingEngine.State.DEMO:
+                            self.engine.context["msg_type"] = "demo_result"
+                            # 设置离线数据源
+                            if self.offline_gen is None:
+                                await websocket.send(json.dumps({"type": "error", "message": "离线数据未加载"}))
+                                continue
+                            label = {"up": 0, "down": 1, "left": 2, "right": 3}[expected_dir]
+                            self._demo_gen = self.offline_gen.get_full_trial_generator_by_label(label)
+                            log(f"[HANDLER] 设置 DEMO 试次，方向: {expected_dir}")
+                        else:
+                            self.engine.context["msg_type"] = "eval_result"
+                            log(f"[HANDLER] 设置 EVAL 期望: {expected_dir}")
+                        continue
+
+                    # ---------- 在线评测启动 ----------
+                    if msg_type == "start_eval":
+                        log("[HANDLER] 收到 start_eval")
+                        if self.mode != "online":
+                            await websocket.send(json.dumps({"type": "eval_error", "message": "请先切换到在线模式"}))
+                            continue
+                        await self._stop_all()
+                        self._load_model_and_engine()
+                        if self.engine is None:
+                            await websocket.send(json.dumps({"type": "eval_error", "message": "引擎初始化失败"}))
+                            continue
+
+                        if not self._connect_acq():
+                            await websocket.send(json.dumps({"type": "eval_error", "message": "EEG设备未连接"}))
+                            continue
+
+                        # 使用内置回调
+                        self.engine.data_source_callback = self.engine._next_acq_sample
+                        self.engine.set_mode(ContinuousStreamingEngine.State.EVAL)
+                        await self.engine.start()
+                        await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
+                        continue
+
+                    # ---------- 实时脑控启动 ----------
                     if msg_type == "start_realtime":
                         log("[HANDLER] 收到 start_realtime")
                         if self.mode != "online":
                             await websocket.send(json.dumps({"error": "请先切换到在线模式"}))
                             continue
-                        if self.realtime_thread and self.realtime_thread.is_alive():
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "already_running"}))
+                        await self._stop_all()
+                        self._load_model_and_engine()
+                        if self.engine is None:
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "引擎初始化失败"}))
                             continue
-                        success = await self._start_realtime_decoding(eval_mode=False, offline_mode=False)
-                        if success:
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "started"}))
-                            log("[HANDLER] 发送 realtime_status started")
-                        else:
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "设备连接失败"}))
-                            log("[HANDLER] 发送 realtime_status error")
-                        continue
 
-                    if msg_type == "stop_realtime":
-                        log("[HANDLER] 收到 stop_realtime")
-                        if self.realtime_thread and self.realtime_thread.is_alive():
-                            self._stop_realtime_decoding()
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "stopped"}))
-                        else:
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "not_running"}))
-                        continue
-
-                    if msg_type == "start_eval":
-                        force_log(f"start_eval 分支，当前 eval_mode={self.eval_mode}")
-                        log("[HANDLER] 收到 start_eval")
-                        if self.mode != "online":
-                            await websocket.send(
-                                json.dumps({"type": "eval_error", "message": "请先切换到在线演示模式"}))
+                        if not self._connect_acq():
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "EEG设备未连接"}))
                             continue
-                        if self.realtime_thread and self.realtime_thread.is_alive():
-                            self._stop_realtime_decoding()
-                        success = await self._start_realtime_decoding(eval_mode=True, offline_mode=False)
-                        force_log(f"_start_realtime_decoding 返回 success={success}, eval_mode={self.eval_mode}")
-                        if success:
-                            await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
-                            log("[HANDLER] 发送 eval_started (在线)")
-                        else:
-                            await websocket.send(json.dumps({"type": "eval_error", "message": "EEG设备未连接，请检查设备后重试"}))
-                            log("[HANDLER] 发送 eval_error (在线)")
+
+                        self.engine.data_source_callback = self.engine._next_acq_sample
+                        self.engine.set_mode(ContinuousStreamingEngine.State.REALTIME)
+                        await self.engine.start()
+                        await websocket.send(json.dumps({"type": "realtime_status", "status": "started"}))
                         continue
 
-                    if msg_type == "eval_step":
-                        if self.engine and self.engine.state == ContinuousStreamingEngine.State.EVAL:
-                            expected_dir = data.get("direction")
-                            self.engine.context["expected_dir"] = expected_dir
-                            self.engine.context["msg_type"] = "eval_result"
-                            log(f"[HANDLER] 设置 EVAL 期望: {expected_dir}")
-                        else:
-                            await websocket.send(json.dumps({"type": "error", "message": "评测未运行"}))
-                        continue
-
-                    if msg_type == "stop_eval":
-                        log("[HANDLER] 收到 stop_eval")
-                        self.eval_mode = False
-                        self.eval_active = False
-                        self._stop_realtime_decoding()
-                        await websocket.send(json.dumps({"type": "eval_stopped"}))
-                        continue
-
-                    if msg_type in ["stop_demo", "stop_eval", "stop_realtime"]:
-                        if self.engine:
-                            await self.engine.stop()
-                        self._stop_all()
-                        await websocket.send(json.dumps({"type": "status", "status": "stopped"}))
-                        continue
-
-                    # 其他消息广播
+                    # ---------- 其他消息 ----------
                     await self._broadcast(message)
 
                 except json.JSONDecodeError:
@@ -700,6 +550,7 @@ class WebSocketServer:
             self.clients.remove(websocket)
             log("[HANDLER] 客户端断开")
 
+    # ========== WebSocket 广播 ==========
     async def _broadcast(self, message):
         if not self.clients:
             return
@@ -708,6 +559,7 @@ class WebSocketServer:
         if tasks:
             await asyncio.wait(tasks)
 
+    # ========== 服务器生命周期 ==========
     async def _start_server(self):
         self.server = await websockets.serve(self._handler, self.host, self.port, reuse_address=True)
         await self.server.wait_closed()
@@ -741,235 +593,19 @@ class WebSocketServer:
 
     def stop(self):
         self._stop_event.set()
-        self._stop_realtime_decoding()
+        # 同步方式停止 - 使用 run_coroutine_threadsafe 并等待
+        if self.loop:
+            future = asyncio.run_coroutine_threadsafe(self._stop_all(), self.loop)
+            try:
+                future.result(timeout=3)
+            except Exception as e:
+                log(f"停止时异常: {e}")
         if self.loop:
             self.loop.call_soon_threadsafe(self.loop.stop)
         if self.thread:
             self.thread.join(timeout=2)
         print("WebSocket 服务器已停止")
 
-
-class ContinuousStreamingEngine:
-    """
-    单一解码引擎，连续运行。
-    支持从 3 种数据源读取数据，并异步发射解码结果。
-    状态机控制引擎的启动、暂停、切换数据源。
-    """
-
-    class State:
-        IDLE = "IDLE"
-        DEMO = "DEMO"
-        EVAL = "EVAL"
-        REALTIME = "REALTIME"
-
-    def __init__(self, model, decoder, occipital_indices, sample_rate=250):
-        self.model = model
-        self.decoder = decoder  # GrowingWindowDecoder 实例
-        self.occipital_indices = occipital_indices
-        self.sample_rate = sample_rate
-
-        # 数据缓冲区 (circular buffer)
-        self.buffer = deque(maxlen=500)  # 最多存 500 个采样点 (2秒)
-
-        # 状态控制
-        self.state = self.State.IDLE
-        self._running = False
-        self._loop_task: Optional[asyncio.Task] = None
-        self._stop_event = asyncio.Event()
-
-        # 数据源回调函数 (由外部注入)
-        self.data_source_callback: Optional[Callable[[], np.ndarray]] = None
-
-        # 结果发射回调 (WebSocket 发送)
-        self.emit_callback: Optional[Callable[[dict], Awaitable[None]]] = None
-
-        # 当前模式上下文
-        self.context = {
-            "expected_dir": None,  # 用于 eval/demo 的 ground truth
-            "msg_type": None,  # "demo_result" / "eval_result"
-            "trial_started": False,
-        }
-
-        # 统计
-        self.frame_count = 0
-        self.decision_count = 0
-        self.last_decision_time = 0.0
-
-        log("[Engine] 连续流解码引擎初始化完成")
-
-    # ============================================================
-    #  1. 数据源注入
-    # ============================================================
-    def set_demo_source(self, generator):
-        """注入离线演示数据源 (OfflineDataGenerator)"""
-        self.data_source_callback = lambda: self._next_demo_sample(generator)
-        log("[Engine] 数据源: DEMO")
-
-    def set_eval_source(self, acq):
-        """注入在线评测数据源 (DataAcquisition)"""
-        self.data_source_callback = lambda: self._next_acq_sample(acq)
-        log("[Engine] 数据源: EVAL")
-
-    def set_realtime_source(self, acq):
-        """注入实时脑控数据源 (DataAcquisition)"""
-        self.data_source_callback = lambda: self._next_acq_sample(acq)
-        log("[Engine] 数据源: REALTIME")
-
-    # ============================================================
-    #  2. 数据源读取函数 (非阻塞)
-    # ============================================================
-    def _next_demo_sample(self, generator):
-        """从 OfflineDataGenerator 获取下一个样本"""
-        try:
-            # generator 是 get_trial_generator_by_label 返回的迭代器
-            # 返回 (data, label, is_end)
-            window, label, is_end = next(generator)
-            # 将整个 window 逐样本喂入
-            return window.T  # (samples, channels)
-        except StopIteration:
-            return None
-
-    def _next_acq_sample(self, acq):
-        """从 DataAcquisition 获取最新一个样本"""
-        sample = acq.get_latest_sample()
-        if sample is None:
-            return None
-        return sample[np.newaxis, :]  # (1, channels)
-
-    # ============================================================
-    #  3. 核心循环 (最关键的 continuous loop)
-    # ============================================================
-    async def _continuous_loop(self):
-        """连续解码主循环 (每 4ms 运行一次，匹配 250Hz)"""
-        self._running = True
-        self._stop_event.clear()
-
-        log("[Engine] 连续解码循环启动")
-
-        while self._running:
-            loop_start = time.perf_counter()
-
-            # 1. 从数据源读取一个样本 (或一个 chunk)
-            if self.data_source_callback:
-                data_chunk = self.data_source_callback()
-                if data_chunk is not None:
-                    # 将样本逐个喂入 buffer
-                    for sample in data_chunk:
-                        # 提取枕区通道 (如果数据是 14 通道)
-                        if sample.shape[0] == 14:
-                            sample = sample[self.occipital_indices]
-                        self.buffer.append(sample)
-
-            # 2. 如果 buffer 足够 500 点，进行解码
-            if len(self.buffer) == 500:
-                window = np.array(self.buffer).T  # (channels, 500)
-                # 预处理 (去均值 + 窄带增强)
-                window = self._preprocess(window)
-
-                # 调用解码器 (feed 方法会返回决策或 None)
-                decision, conf, current_time = self.decoder.feed(window)
-
-                # 3. 如果有决策，且当前状态不是 IDLE，发射结果
-                if decision is not None and self.state != self.State.IDLE:
-                    await self._on_decision(decision, conf, current_time)
-
-            # 4. 精确控制循环频率 (250Hz = 4ms)
-            elapsed = time.perf_counter() - loop_start
-            sleep_time = max(0, 0.004 - elapsed)  # 4ms
-            await asyncio.sleep(sleep_time)
-
-        log("[Engine] 连续解码循环退出")
-
-    # ============================================================
-    #  4. 决策发射 (状态机 + WebSocket)
-    # ============================================================
-    async def _on_decision(self, decision, conf, current_time):
-        """当解码器产生决策时调用"""
-        self.decision_count += 1
-        self.last_decision_time = current_time
-
-        # 根据当前状态组装消息
-        if self.state == self.State.REALTIME:
-            # 实时模式：直接发射命令
-            command = ["up", "down", "left", "right"][decision]
-            msg = {
-                "type": "realtime_command",
-                "command": command,
-                "confidence": conf,
-                "all_confidences": [0.0] * 4
-            }
-            if self.emit_callback:
-                await self.emit_callback(msg)
-
-        elif self.state in (self.State.DEMO, self.State.EVAL):
-            # 演示/评测模式：需要 ground truth
-            expected = self.context.get("expected_dir")
-            msg_type = self.context.get("msg_type", "eval_result")
-            if expected is not None:
-                decoded_dir = ["up", "down", "left", "right"][decision]
-                match = (decoded_dir == expected)
-                msg = {
-                    "type": msg_type,
-                    "decoded": decoded_dir,
-                    "expected": expected,
-                    "match": match,
-                    "timeout": False,
-                    "confidence": conf,
-                    "all_confidences": [0.0] * 4
-                }
-                if self.emit_callback:
-                    await self.emit_callback(msg)
-                # 重置上下文，等待下一个 step (Demo/Eval 模式下)
-                self.context["expected_dir"] = None
-                self.context["msg_type"] = None
-
-        # 决策后自动重置 decoder (准备下一轮)
-        self.decoder.reset()
-
-    # ============================================================
-    #  5. 状态控制接口 (由 WebSocketServer 调用)
-    # ============================================================
-    async def start(self):
-        """启动连续解码循环"""
-        if self._running:
-            log("[Engine] 引擎已在运行")
-            return
-        self._loop_task = asyncio.create_task(self._continuous_loop())
-
-    async def stop(self):
-        """停止解码循环，回归 IDLE"""
-        self._running = False
-        self.state = self.State.IDLE
-        self.context = {"expected_dir": None, "msg_type": None}
-        if self._loop_task:
-            self._loop_task.cancel()
-            try:
-                await self._loop_task
-            except asyncio.CancelledError:
-                pass
-            self._loop_task = None
-        self.buffer.clear()
-        self.decoder.reset()
-        log("[Engine] 引擎已停止，状态 IDLE")
-
-    def set_mode(self, state: str, expected_dir=None, msg_type=None):
-        """切换模式，不中断引擎"""
-        self.state = state
-        self.context["expected_dir"] = expected_dir
-        self.context["msg_type"] = msg_type
-        log(f"[Engine] 模式切换为: {state}")
-
-    # ============================================================
-    #  6. 预处理 (与训练保持一致)
-    # ============================================================
-    def _preprocess(self, window):
-        window = window - np.mean(window, axis=1, keepdims=True)
-        from scipy.signal import butter, sosfilt
-        fs = self.sample_rate
-        sos = butter(4, [15.5, 17.5], btype='bandpass', fs=fs, output='sos')
-        filtered = sosfilt(sos, window, axis=-1)
-        window = window + 0.5 * filtered
-        return window
 
 def get_websocket_server():
     return WebSocketServer()
