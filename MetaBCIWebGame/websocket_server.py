@@ -2,7 +2,10 @@
 print("WS FILE =", __file__, flush=True)
 print("🔥🔥🔥 统一管道版 websocket_server.py 已加载 🔥🔥🔥")
 import sys
-sys.path.insert(0, r"D:\pycharm\PyCharm 2026.1\my-projects\MetaBCI")
+import os
+_METABCI_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'MetaBCI')
+if os.path.isdir(_METABCI_ROOT):
+    sys.path.insert(0, os.path.abspath(_METABCI_ROOT))
 
 import asyncio
 import json
@@ -11,21 +14,15 @@ import time
 import websockets
 import numpy as np
 import joblib
-import os
 import glob
-import traceback
 from collections import deque
 from typing import Optional, Callable, Awaitable, Tuple, Any
 from config import (
     WS_HOST, WS_PORT, MODEL_PATH, NEURACLE_IP, NEURACLE_PORT,
     OFFLINE_DATA_ROOT, WINDOW_LEN_SAMPLES, ONLINE_SAMPLE_RATE,
-    RAW_WINDOW_SAMPLES, VOTER_DECAY, VOTER_LOCK_FRAMES,
-    VOTER_LOCK_DURATION, VOTER_THRESHOLD, DEMO_DATA_ROOT,
-    FIXED_WINDOW_MODE
+    DEMO_DATA_ROOT
 )
-from online_decode import DynamicStoppingDecoder
 from data_acquisition import DataAcquisition
-from advanced_voter import AdvancedVoter
 from growing_window_decoder import GrowingWindowDecoder
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -224,6 +221,9 @@ class ContinuousStreamingEngine:
 
         if self.state != self.State.REALTIME:
             self.decoder.reset()
+        else:
+            # REALTIME: slide window forward instead of full reset
+            self.decoder.slide()
 
     async def start(self):
         if self._running:
@@ -555,9 +555,16 @@ class WebSocketServer:
         if not self.clients:
             return
         msg = json.dumps(message) if not isinstance(message, str) else message
-        tasks = [asyncio.create_task(client.send(msg)) for client in self.clients]
-        if tasks:
-            await asyncio.wait(tasks)
+        stale = []
+        for client in self.clients:
+            try:
+                await client.send(msg)
+            except websockets.exceptions.ConnectionClosed:
+                stale.append(client)
+        # Clean up disconnected clients
+        for client in stale:
+            self.clients.discard(client)
+            log(f"[广播] 移除断线客户端")
 
     # ========== 服务器生命周期 ==========
     async def _start_server(self):

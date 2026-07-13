@@ -1,17 +1,16 @@
 # main.py
 print("MAIN FILE =", __file__, flush=True)
 import sys
-
 import signal
-import time
+import threading
 from websocket_server import get_websocket_server
 
-running = True
+_stop_event = threading.Event()
 
 def signal_handler(sig, frame):
-    global running
+    global _stop_event
     print("\n收到退出信号，正在退出...")
-    running = False
+    _stop_event.set()
 
 def main():
     signal.signal(signal.SIGINT, signal_handler)
@@ -20,8 +19,7 @@ def main():
     ws.start()
     print("WebSocket 服务器已启动，等待前端连接...")
     try:
-        while running:
-            time.sleep(0.5)
+        _stop_event.wait()
     except KeyboardInterrupt:
         print("\n用户中断")
     finally:

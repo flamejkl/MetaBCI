@@ -67,7 +67,10 @@
     let stimAnimationId = null;
     let stimStartTime = null;
     let lastStimFrameTime = 0;
-    let frameIntervals = [];
+    let frameIntHead = 0;
+    const FRAME_BUF_SIZE = 64;
+    const frameIntervals = new Array(FRAME_BUF_SIZE).fill(0);
+    let frameIntCount = 0;
 
     // ==================== 刺激块布局 ====================
     const STIM_CONFIG = {
@@ -179,15 +182,21 @@
         if (stimFlashing) {
             const interval = now - lastStimFrameTime;
             lastStimFrameTime = now;
-            frameIntervals.push(interval);
-            if (frameIntervals.length > 300) frameIntervals.shift();
-            if (frameIntervals.length === 60) {
-                const dropped = frameIntervals.filter(v => v > 30).length;
-                const dropRate = dropped / frameIntervals.length;
+            frameIntervals[frameIntHead] = interval;
+            frameIntHead = (frameIntHead + 1) % FRAME_BUF_SIZE;
+            frameIntCount++;
+            if (frameIntCount === 60) {
+                let dropped = 0;
+                const count = Math.min(frameIntCount, FRAME_BUF_SIZE);
+                for (let i = 0; i < count; i++) {
+                    if (frameIntervals[i] > 30) dropped++;
+                }
+                const dropRate = dropped / count;
                 if (dropRate > 0.05) {
                     console.warn(`[刺激] 丢帧率 ${(dropRate*100).toFixed(1)}%`);
                 }
-                frameIntervals = [];
+                frameIntCount = 0;
+                frameIntHead = 0;
             }
         }
         drawStimuli(now);
@@ -200,7 +209,8 @@
             stimFlashing = true;
             stimStartTime = performance.now();
             lastStimFrameTime = stimStartTime;
-            frameIntervals = [];
+            frameIntHead = 0;
+            frameIntCount = 0;
             if (!stimAnimationId) {
                 stimAnimationId = requestAnimationFrame(animateStim);
             }

@@ -50,9 +50,6 @@ OFFLINE_DATA_ROOT = os.path.join(BASE_DIR, "data_self")   # 存放 .npy 文件�
 OFFLINE_TIMEOUT_PROB = 0.2      # 每个试次 20% 概率触发超时
 OFFLINE_TIMEOUT_DELAY = 1.0
 
-# config.py 末尾添加
-FIXED_WINDOW_MODE = True   # True: 固定窗口模式（演示推荐）; False: 滑动窗口模式（用于连续控制）
-
 # ========== Growing Window 动态停止参数 ==========
 GW_MODEL_PATHS = {
     125: "model_125.pkl",
