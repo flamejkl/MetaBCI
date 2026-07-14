@@ -15,6 +15,7 @@ import websockets
 import numpy as np
 import joblib
 import glob
+import traceback
 from collections import deque
 from typing import Optional, Callable, Awaitable, Tuple, Any
 from config import (
@@ -546,6 +547,13 @@ class WebSocketServer:
 
                 except json.JSONDecodeError:
                     pass
+                except Exception as e:
+                    force_log(f"[HANDLER] 消息处理异常: {e}")
+                    traceback.print_exc()
+                    try:
+                        await websocket.send(json.dumps({"type": "error", "message": str(e)}))
+                    except Exception:
+                        pass
         finally:
             self.clients.remove(websocket)
             log("[HANDLER] 客户端断开")
@@ -556,19 +564,19 @@ class WebSocketServer:
             return
         msg = json.dumps(message) if not isinstance(message, str) else message
         stale = []
-        for client in self.clients:
+        # Iterate over a snapshot to avoid "set changed size during iteration"
+        for client in list(self.clients):
             try:
                 await client.send(msg)
-            except websockets.exceptions.ConnectionClosed:
+            except Exception:
                 stale.append(client)
         # Clean up disconnected clients
         for client in stale:
             self.clients.discard(client)
-            log(f"[广播] 移除断线客户端")
 
     # ========== 服务器生命周期 ==========
     async def _start_server(self):
-        self.server = await websockets.serve(self._handler, self.host, self.port, reuse_address=True)
+        self.server = await websockets.serve(self._handler, self.host, self.port)
         await self.server.wait_closed()
 
     def _run_loop(self):

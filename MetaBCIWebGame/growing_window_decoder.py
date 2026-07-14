@@ -51,7 +51,7 @@ class GrowingWindowDecoder:
         # ---- pre-compute filter coefficients ONCE ----
         fs = self.sample_rate
         # Broad bandpass covering all four SSVEP frequencies (8–17 Hz with margins)
-        self._sos = butter(4, [7, 90], btype='bandpass', fs=fs, output='sos')
+        self._sos = butter(4, [7, 18], btype='bandpass', fs=fs, output='sos')
 
         # ---- cache for forced-output at max_len to avoid redundant compute ----
         self._cached_window = None    # (model_len, preprocessed_window)
