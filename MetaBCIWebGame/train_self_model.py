@@ -41,58 +41,128 @@ ENSEMBLE = True
 OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]
 
 # ========== 数据增强参数 ==========
-AUG_NUM = 3                     # 每个原始试次生成的增强样本数
-AUG_DROP_PROB = 0.5             # 触发通道衰减的概率
-AUG_NOISE_RATIO = 0.01          # 噪声幅值为该通道标准差的 1%
-AUG_SCALE_RANGE = (0.9, 1.1)    # 整体幅值缩放范围
-AUG_ATTEN_RANGE = (0.4, 0.7)    # 单通道衰减保留比例
+AUG_NUM = 5                     # 每个原始试次生成的增强样本数（提升至5对抗分布偏移）
+AUG_DROP_PROB = 0.6             # 触发通道衰减的概率
+AUG_NOISE_RATIO = 0.015         # 噪声幅值为该通道标准差的 1.5%（比实验环境更激进）
+AUG_SCALE_RANGE = (0.7, 1.3)    # 整体幅值缩放范围（加宽模拟游戏中的阻抗漂移）
+AUG_ATTEN_RANGE = (0.3, 0.8)    # 单通道衰减保留比例
+AUG_FREQ_JITTER = 0.03          # 频率抖动：时间轴最大拉伸/压缩比例
+AUG_BLINK_PROB = 0.3            # 注入眨眼伪迹的概率
+AUG_BLINK_AMP = 5.0             # 眨眼伪迹最大幅值（μV量级，相对归一化数据）
+AUG_TEMPORAL_SHIFT = 25         # 随机窗口偏移量（采样点）
 
 
 # ============================================================
-#  数据增强：幅值缩放 + 通道衰减 + 按通道自适应噪声
+#  数据增强（实验→游戏分布偏移对抗版）
+#
+#  在原有三个增强（幅值缩放、通道衰减、高斯噪声）基础上新增：
+#  ④ 频率抖动 — 模拟游戏中注意力波动导致的 SSVEP 频率漂移
+#  ⑤ 眨眼伪迹 — 模拟游戏中更频繁的眼动/眨眼
+#  ⑥ 时间偏移 — 模拟游戏中自定节奏的试次对齐误差
 # ============================================================
-def augment_ssvep_data(X, y, num_aug=3, drop_prob=0.5, noise_ratio=0.01,
-                       scale_range=(0.9, 1.1), atten_range=(0.4, 0.7),
+def augment_ssvep_data(X, y, num_aug=AUG_NUM, drop_prob=AUG_DROP_PROB,
+                       noise_ratio=AUG_NOISE_RATIO,
+                       scale_range=AUG_SCALE_RANGE, atten_range=AUG_ATTEN_RANGE,
                        random_seed=None):
     """
-    针对 SSVEP 固定窗口数据的增强策略
-    - 整体幅值缩放（模拟皮肤阻抗变化）
-    - 随机单通道衰减（模拟个别电极接触变差）
-    - 按通道标准差的自适应高斯噪声（模拟系统热噪声）
+    针对 SSVEP 固定窗口数据的增强策略（分布偏移对抗版）
+    - ① 整体幅值缩放（模拟阻抗/皮肤导电率变化）
+    - ② 随机单通道衰减（模拟个别电极接触变差）
+    - ③ 按通道自适应高斯噪声（模拟系统热噪声）
+    - ④ 频率抖动 / 时间轴非线性拉伸（模拟注意力波动→SSVEP频率漂移）
+    - ⑤ 眨眼伪迹注入（游戏中更频繁的眼动/眨眼）
+    - ⑥ 随机窗口偏移（游戏中自定节奏的试次时间对齐误差）
     """
     rng = np.random.RandomState(random_seed)
     X_aug, y_aug = [], []
     n_trials, n_chans, n_samples = X.shape
 
+    # 眨眼模板：高斯波形模拟眨眼（仅影响额区通道 Fp1/Fp2，即索引0,1）
+    blink_template = _make_blink_template(n_samples, peak_amp=AUG_BLINK_AMP)
+
     for i in range(n_trials):
-        original = X[i]  # (n_chans, n_samples)
+        original = X[i].astype(np.float64)  # (n_chans, n_samples)
 
         # --- 1. 保留原始样本 ---
-        X_aug.append(original)
+        X_aug.append(original.copy())
         y_aug.append(y[i])
 
         # --- 2. 生成增强样本 ---
-        for _ in range(num_aug):
+        for aug_idx in range(num_aug):
             aug = original.copy()
 
-            # ① 整体幅值缩放
+            # ① 整体幅值缩放（更宽范围模拟游戏中的大幅度阻抗漂移）
             scale = rng.uniform(*scale_range)
             aug *= scale
 
-            # ② 通道衰减
-            if rng.rand() < drop_prob:
-                ch = rng.randint(0, n_chans)
+            # ② 多通道衰减（游戏中可能多个电极松动）
+            n_drop = rng.randint(1, max(2, n_chans // 3))
+            drop_chs = rng.choice(n_chans, size=n_drop, replace=False)
+            for ch in drop_chs:
                 atten = rng.uniform(*atten_range)
                 aug[ch, :] *= atten
 
             # ③ 按通道自适应高斯噪声
             sigma = noise_ratio * np.std(aug, axis=1, keepdims=True)
-            aug = aug + rng.normal(0, sigma, aug.shape)
+            aug += rng.normal(0, sigma, aug.shape)
+
+            # ④ 频率抖动：对时间轴做非线性拉伸/压缩
+            if rng.rand() < 0.6:
+                aug = _apply_frequency_jitter(aug, rng, jitter=AUG_FREQ_JITTER)
+
+            # ⑤ 眨眼伪迹注入：仅在额区通道添加
+            if rng.rand() < AUG_BLINK_PROB:
+                blink_pos = rng.randint(0, n_samples - len(blink_template))
+                aug[0, blink_pos:blink_pos + len(blink_template)] += blink_template
+                # 有时两眼同步眨眼
+                if rng.rand() < 0.7:
+                    aug[1, blink_pos:blink_pos + len(blink_template)] += \
+                        blink_template * rng.uniform(0.7, 1.0)
+
+            # ⑥ 随机窗口偏移：滚动数据模拟时间对齐误差
+            shift = rng.randint(-AUG_TEMPORAL_SHIFT, AUG_TEMPORAL_SHIFT + 1)
+            if shift != 0:
+                aug = np.roll(aug, shift, axis=-1)
+                if shift > 0:
+                    aug[:, :shift] = aug[:, shift:shift + 1]  # 边界填充
+                else:
+                    aug[:, shift:] = aug[:, shift - 1:shift]
 
             X_aug.append(aug)
             y_aug.append(y[i])
 
     return np.array(X_aug), np.array(y_aug)
+
+
+def _make_blink_template(n_samples, peak_amp=5.0):
+    """生成一个高斯波形的眨眼伪迹模板（宽度约200ms @ 250Hz = 50点）。"""
+    t = np.arange(n_samples)
+    # 随机位置的高斯脉冲，sigma ≈ 25 点 (100 ms)
+    center = n_samples // 4  # 模板中心在前 1/4 处，后续随机移位
+    sigma = 25.0
+    template = peak_amp * np.exp(-0.5 * ((t - center) / sigma) ** 2)
+    return template.astype(np.float64)
+
+
+def _apply_frequency_jitter(aug, rng, jitter=0.03):
+    """对单试次数据做时间轴非线性拉伸/压缩，模拟 SSVEP 频率微小漂移。
+
+    使用正弦调制的时间重采样：t' = t + α * sin(2π * t * f_mod)
+    其中 α 控制抖动幅度，f_mod 为调制频率（低频，模拟慢漂移）。
+    """
+    n_chans, n_samples = aug.shape
+    t = np.arange(n_samples, dtype=np.float64)
+    # 随机调制参数
+    alpha = rng.uniform(0, jitter) * n_samples   # 最大位移（采样点）
+    f_mod = rng.uniform(0.5, 3.0) / n_samples    # 调制频率（慢变）
+    # 新时间坐标
+    t_new = t + alpha * np.sin(2.0 * np.pi * f_mod * t + rng.uniform(0, 2 * np.pi))
+    t_new = np.clip(t_new, 0, n_samples - 1)
+    # 逐通道插值
+    result = np.zeros_like(aug)
+    for ch in range(n_chans):
+        result[ch] = np.interp(t_new, t, aug[ch])
+    return result
 
 
 # ============================================================
