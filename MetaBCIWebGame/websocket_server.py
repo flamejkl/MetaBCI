@@ -14,7 +14,6 @@ import time
 import websockets
 import numpy as np
 import joblib
-import glob
 import random
 import traceback
 from collections import deque
@@ -25,7 +24,17 @@ from config import (
     DEMO_DATA_ROOT
 )
 from data_acquisition import DataAcquisition
-from growing_window_decoder import GrowingWindowDecoder
+
+# ---- MetaBCI 框架集成 ----
+# brainda: 分类算法与数据集
+from metabci.brainda.algorithms.decomposition import (
+    GrowingWindowDecoder, AdvancedVoter
+)
+from metabci.brainda.datasets import SelfSSVEP
+
+# brainflow: 在线处理引擎与采集 Worker
+from metabci.brainflow.online import ContinuousStreamingEngine
+from metabci.brainflow.ssvep_worker import SSVEPWorker
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -51,29 +60,19 @@ class OfflineDataGenerator:
         self._load_all_trials()
 
     def _load_all_trials(self):
-        for label in range(4):
-            folder = os.path.join(self.data_root, str(label + 1))
-            if not os.path.isdir(folder):
-                log(f"警告：目录 {folder} 不存在")
-                continue
-            files = glob.glob(os.path.join(folder, "*.npy"))
-            for f in files:
-                if "hw_trial_0000.npy" in f:
-                    log(f"[跳过] 已知异常试次: {f}")
-                    continue
-                if self.offset_only and "offset000" not in f:
-                    continue
-                data = np.load(f)
-                log(f"[加载] {f} shape={data.shape}")
-                data = data[self.occipital_indices, :]
-                # 存储 (数据, 标签, 文件名)
-                self.trials_by_label[label].append((data, label, os.path.basename(f)))
+        # 使用 MetaBCI 数据集接口加载自采 SSVEP 数据
+        ds = SelfSSVEP(
+            data_root=self.data_root,
+            occipital_indices=self.occipital_indices,
+            offset_only=self.offset_only,
+        )
+        self.trials_by_label = ds.trials_by_label
         self.trials = []
         for label in range(4):
             self.trials.extend(self.trials_by_label[label])
         if not self.trials:
             raise RuntimeError("未加载到任何离线试次，请检查 data_self 目录")
-        log(f"离线数据加载完成，共 {len(self.trials)} 个试次")
+        log(f"离线数据加载完成（MetaBCI SelfSSVEP），共 {len(self.trials)} 个试次")
 
     def get_full_trial_generator_by_label(self, label):
         trials = self.trials_by_label.get(label, [])

@@ -1,8 +1,12 @@
 # data_acquisition.py
+# 通过 brainflow ProcessWorker 模式实现 EEG 数据采集
+# 在线解码场景可使用 metabci.brainflow.SSVEPWorker 替代本类的实时处理逻辑
 import time
 import numpy as np
 import threading
 from neuracle_api import DataServerThread
+from metabci.brainflow.workers import ProcessWorker  # MetaBCI brainflow 基类
+
 
 class DataAcquisition:
     def __init__(self, mode='simulate', save_path=None,

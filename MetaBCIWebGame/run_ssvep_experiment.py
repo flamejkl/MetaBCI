@@ -5,7 +5,9 @@ import numpy as np
 import scipy.io as sio
 from datetime import datetime
 from psychopy import visual, monitors, core, event
-from metabci.brainstim.paradigm import SSVEP
+from metabci.brainstim.paradigm import SSVEP     # SSVEP 刺激范式
+from metabci.brainstim.framework import Experiment  # 实验流程框架
+from metabci.brainstim.utils import NeuraclePort    # Neuracle Trigger 通信
 from data_acquisition import DataAcquisition
 import serial
 import serial.tools.list_ports

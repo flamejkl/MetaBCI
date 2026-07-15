@@ -21,7 +21,7 @@ from config import (
     VOTER_LOCK_DURATION,
     VOTER_THRESHOLD
 )
-from advanced_voter import AdvancedVoter
+from metabci.brainda.algorithms.decomposition import AdvancedVoter
 
 # ============================================================
 #  配置参数
