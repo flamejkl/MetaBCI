@@ -15,6 +15,7 @@ import websockets
 import numpy as np
 import joblib
 import glob
+import random
 import traceback
 from collections import deque
 from typing import Optional, Callable, Awaitable, Tuple, Any
@@ -78,11 +79,11 @@ class OfflineDataGenerator:
         trials = self.trials_by_label.get(label, [])
         if not trials:
             raise ValueError(f"标签 {label} 没有数据")
-        idx = 0
+        n = len(trials)
         while True:
-            data, lbl, fname = trials[idx % len(trials)]
-            idx += 1
-            yield data, lbl, fname   # 返回文件名
+            idx = random.randint(0, n - 1)
+            data, lbl, fname = trials[idx]
+            yield data, lbl, fname   # 每次随机抽取
 
 
 # =========================== 模拟数据生成器（未改动） ===========================

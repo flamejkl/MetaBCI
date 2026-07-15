@@ -229,12 +229,26 @@
         render(ctx) {}
         getScore() { return 0; }
         getDiamonds() { return { collected: 0, total: 0 }; }
+        stop() {}  // cleanup timers/loops
     }
 
-    // ==================== 迷宫游戏（完整实现） ====================
+    // ==================== 迷宫游戏（视觉优化版） ====================
     class MazeGame extends BaseGame {
-        constructor() { super(); this.state = null; }
+        constructor() {
+            super();
+            this.state = null;
+            this._animId = null;       // rAF id for animations
+            this._animFrom = null;     // [r, c] animation start
+            this._animTo = null;       // [r, c] animation end
+            this._animStart = 0;       // timestamp
+            this._animDur = 160;       // ms for smooth player slide
+            this._particles = [];      // {x, y, vx, vy, life, maxLife, color}
+            this._lastFrame = 0;
+            this._goalGlow = 0;        // goal pulse phase
+        }
+
         init(width = MAZE_DEFAULT_W, height = MAZE_DEFAULT_H) {
+            this._stopAnim();
             const maze = this._generateMazePrim(width, height);
             const [exitX, exitY] = this._findFarthestPoint(maze, 1, 1);
             this._connectExitToBoundary(maze, exitX, exitY);
@@ -246,10 +260,88 @@
             const cellSize = Math.min(gameCanvas.width / maze[0].length, gameCanvas.height / maze.length);
             this.state = {
                 maze, player: [1,1], goal: [exitY,exitX], score: 0, moves: 0,
-                cell_size: cellSize, diamonds, collectedDiamonds: 0, totalDiamonds: dCount
+                cell_size: cellSize, diamonds, collectedDiamonds: 0, totalDiamonds: dCount,
+                won: false
             };
+            this._animFrom = null; this._animTo = null;
+            this._particles = [];
+            this._lastFrame = performance.now();
+            this._startAnimLoop();
             this._updateUI();
         }
+
+        stop() { this._stopAnim(); }
+
+        // ================ animation loop ================
+        _startAnimLoop() {
+            const loop = (now) => {
+                const dt = now - this._lastFrame;
+                this._lastFrame = now;
+                this._goalGlow += dt * 0.003;  // slow pulse
+                // update particles
+                this._particles = this._particles.filter(p => {
+                    p.x += p.vx * dt / 1000;
+                    p.y += p.vy * dt / 1000;
+                    p.life -= dt;
+                    return p.life > 0;
+                });
+                this.render(gameCtx);
+                // keep loop alive if animating or particles active
+                if (this._animTo || this._particles.length > 0 || this.state?.won) {
+                    this._animId = requestAnimationFrame(loop);
+                } else {
+                    this._animId = null;
+                }
+            };
+            if (!this._animId) this._animId = requestAnimationFrame(loop);
+        }
+        _stopAnim() {
+            if (this._animId) { cancelAnimationFrame(this._animId); this._animId = null; }
+        }
+        _wakeAnim() {
+            if (!this._animId && this.state) {
+                this._lastFrame = performance.now();
+                this._animId = requestAnimationFrame((now) => {
+                    this._lastFrame = now;
+                    const loop = (now2) => {
+                        const dt = now2 - this._lastFrame;
+                        this._lastFrame = now2;
+                        this._goalGlow += dt * 0.003;
+                        this._particles = this._particles.filter(p => {
+                            p.x += p.vx * dt / 1000;
+                            p.y += p.vy * dt / 1000;
+                            p.life -= dt;
+                            return p.life > 0;
+                        });
+                        this.render(gameCtx);
+                        if (this._animTo || this._particles.length > 0 || this.state?.won) {
+                            this._animId = requestAnimationFrame(loop);
+                        } else {
+                            this._animId = null;
+                        }
+                    };
+                    this._animId = requestAnimationFrame(loop);
+                });
+            }
+        }
+
+        // ================ spawn particles ================
+        _burst(x, y, color, count) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 40 + Math.random() * 120;
+                this._particles.push({
+                    x, y,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed - 30,
+                    life: 300 + Math.random() * 400,
+                    maxLife: 700,
+                    color: color
+                });
+            }
+        }
+
+        // ================ maze generation (unchanged) ================
         _generateMazePrim(width, height) {
             if (width%2===0) width++; if (height%2===0) height++;
             const maze = Array(height).fill().map(()=>Array(width).fill(1));
@@ -261,9 +353,8 @@
                 const dirs = [[-2,0],[2,0],[0,-2],[0,2]];
                 for (let [dx,dy] of dirs) {
                     let nx = x+dx, ny = y+dy;
-                    if (nx>0 && nx<width-1 && ny>0 && ny<height-1 && maze[ny][nx]===1) {
+                    if (nx>0 && nx<width-1 && ny>0 && ny<height-1 && maze[ny][nx]===1)
                         walls.push({ wx: x+dx/2, wy: y+dy/2, nx, ny });
-                    }
                 }
             };
             addWalls(startX, startY);
@@ -321,12 +412,12 @@
             for(let i=cand.length-1;i>0;i--) { const j=Math.floor(Math.random()*(i+1)); [cand[i],cand[j]]=[cand[j],cand[i]]; }
             return cand.slice(0, Math.min(count, cand.length));
         }
+
+        // ================ brain input ================
         handleMove(cmd) {
-            if (!this.state) {
-                console.warn('handleMove: state 未初始化');
-                return false;
-            }
-            let newPos = [...this.state.player];
+            const s = this.state;
+            if (!s || s.won) return false;
+            let newPos = [...s.player];
             switch(cmd) {
                 case 'up': newPos[0]--; break;
                 case 'down': newPos[0]++; break;
@@ -334,81 +425,271 @@
                 case 'right': newPos[1]++; break;
                 default: return false;
             }
-            // 边界检查
-            if (newPos[0] < 0 || newPos[0] >= this.state.maze.length ||
-                newPos[1] < 0 || newPos[1] >= this.state.maze[0].length) {
-                console.warn(`移动 ${cmd} 越界，当前坐标 ${this.state.player}，目标 ${newPos}`);
-                return false;
-            }
-            // 墙壁检查
-            if (this.state.maze[newPos[0]][newPos[1]] !== 0) {
-                console.warn(`移动 ${cmd} 撞墙，当前坐标 ${this.state.player}，目标 ${newPos}`);
-                return false;
-            }
-            // 移动有效
-            this.state.player = newPos;
-            this.state.moves++;
-            // 钻石收集逻辑
-            const idx = this.state.diamonds.findIndex(d => d[0]===newPos[0] && d[1]===newPos[1]);
+            if (newPos[0] < 0 || newPos[0] >= s.maze.length ||
+                newPos[1] < 0 || newPos[1] >= s.maze[0].length) return false;
+            if (s.maze[newPos[0]][newPos[1]] !== 0) return false;
+
+            // Start smooth-move animation from current to new cell
+            this._animFrom = [...s.player];
+            this._animTo = newPos;
+            this._animStart = performance.now();
+            this._wakeAnim();
+
+            s.player = newPos;
+            s.moves++;
+
+            // Diamond collect?
+            const idx = s.diamonds.findIndex(d => d[0]===newPos[0] && d[1]===newPos[1]);
             if (idx !== -1) {
-                this.state.diamonds.splice(idx,1);
-                this.state.collectedDiamonds++;
-                this.state.score += 10;
+                s.diamonds.splice(idx,1);
+                s.collectedDiamonds++;
+                s.score += 10;
+                // compute world position for particle burst
+                const cs = s.cell_size;
+                const offX = (gameCanvas.width - s.maze[0].length*cs)/2;
+                const offY = (gameCanvas.height - s.maze.length*cs)/2;
+                const wx = offX + newPos[1]*cs + cs/2;
+                const wy = offY + newPos[0]*cs + cs/2;
+                this._burst(wx, wy, '#ffcc00', 12);
                 this._updateUI();
             }
-            // 检查是否到达终点
-            if (newPos[0]===this.state.goal[0] && newPos[1]===this.state.goal[1]) {
-                const rate = (this.state.collectedDiamonds/this.state.totalDiamonds)*100;
-                let bonus = 10;
-                let msg = "收集率不足50%";
-                if(rate===100) { bonus=50; msg="完美收集！"; }
-                else if(rate>=80) { bonus=30; msg="收集率超过80%"; }
-                else if(rate>=50) { bonus=20; msg="收集率超过50%"; }
-                this.state.score += bonus;
+
+            // Goal reached?
+            if (newPos[0]===s.goal[0] && newPos[1]===s.goal[1]) {
+                const rate = s.totalDiamonds > 0 ? (s.collectedDiamonds/s.totalDiamonds)*100 : 0;
+                let bonus = 10, msg = '收集率不足50%';
+                if (rate===100) { bonus=50; msg='✨ 完美收集！'; }
+                else if (rate>=80) { bonus=30; msg='收集率超过80%'; }
+                else if (rate>=50) { bonus=20; msg='收集率超过50%'; }
+                s.score += bonus;
+                s.won = true;
+                s._winMsg = msg;
+                s._winBonus = bonus;
+                s._winRate = rate;
+                // goal burst
+                const cs = s.cell_size;
+                const offX = (gameCanvas.width - s.maze[0].length*cs)/2;
+                const offY = (gameCanvas.height - s.maze.length*cs)/2;
+                this._burst(offX + newPos[1]*cs + cs/2, offY + newPos[0]*cs + cs/2, '#ffaa00', 30);
                 this._updateUI();
-                alert(`到达出口！\n钻石: ${this.state.collectedDiamonds}/${this.state.totalDiamonds} (${Math.round(rate)}%)\n${msg}\n+${bonus}分\n总分:${this.state.score}`);
+                this._wakeAnim();
+                // Auto-handle demo/eval mode after a short delay
                 if (evalMode) {
-                    stopEvalMode();
+                    setTimeout(() => stopEvalMode(), 1500);
                 } else if (demoActive) {
-                    stopDemo();
-                } else {
-                    const w = this.state.maze[0].length;
-                    const h = this.state.maze.length;
-                    this.init(w, h);
+                    setTimeout(() => stopDemo(), 1500);
                 }
-                return true;
             }
-            this.render(gameCtx);
             this._updateUI();
-            console.log(`移动 ${cmd} 成功，新坐标 ${this.state.player}`);
             return true;
         }
+
+        // ================ rendering ================
         render(ctx) {
             const s = this.state;
             if (!s) return;
             const cs = s.cell_size;
-            const offX = (gameCanvas.width - s.maze[0].length*cs)/2;
-            const offY = (gameCanvas.height - s.maze.length*cs)/2;
-            ctx.clearRect(0,0,gameCanvas.width,gameCanvas.height);
-            for(let i=0;i<s.maze.length;i++) {
-                for(let j=0;j<s.maze[i].length;j++) {
+            const rows = s.maze.length, cols = s.maze[0].length;
+            const offX = (gameCanvas.width - cols*cs)/2;
+            const offY = (gameCanvas.height - rows*cs)/2;
+
+            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            // ---- background ----
+            ctx.fillStyle = '#0d1117';
+            ctx.fillRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            // ---- cells ----
+            for (let i = 0; i < rows; i++) {
+                for (let j = 0; j < cols; j++) {
                     const x = offX + j*cs, y = offY + i*cs;
-                    ctx.fillStyle = s.maze[i][j]===1 ? '#2c2c2c' : '#d9d9d9';
-                    ctx.fillRect(x, y, cs, cs);
+                    if (s.maze[i][j] === 1) {
+                        // Wall: dark gradient with slight 3D bevel
+                        const grad = ctx.createLinearGradient(x, y, x + cs, y + cs);
+                        grad.addColorStop(0, '#1e2430');
+                        grad.addColorStop(0.4, '#2a3040');
+                        grad.addColorStop(0.6, '#252c38');
+                        grad.addColorStop(1, '#1a1f28');
+                        ctx.fillStyle = grad;
+                        ctx.fillRect(x, y, cs, cs);
+                        // top-left highlight edge
+                        ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+                        ctx.lineWidth = 1;
+                        ctx.beginPath(); ctx.moveTo(x, y+cs); ctx.lineTo(x, y); ctx.lineTo(x+cs, y); ctx.stroke();
+                        // bottom-right shadow edge
+                        ctx.strokeStyle = 'rgba(0,0,0,0.3)';
+                        ctx.beginPath(); ctx.moveTo(x+cs, y); ctx.lineTo(x+cs, y+cs); ctx.lineTo(x, y+cs); ctx.stroke();
+                    } else {
+                        // Path: warm sandstone
+                        ctx.fillStyle = '#c8b89a';
+                        ctx.fillRect(x, y, cs, cs);
+                        // subtle pattern
+                        ctx.fillStyle = 'rgba(0,0,0,0.03)';
+                        if ((i+j)%2===0) ctx.fillRect(x, y, cs, cs);
+                    }
                 }
             }
-            for(let d of s.diamonds) {
-                const x = offX + d[1]*cs, y = offY + d[0]*cs;
-                const cx = x+cs/2, cy = y+cs/2, r = cs*0.3;
-                ctx.beginPath(); ctx.moveTo(cx,cy-r); ctx.lineTo(cx+r,cy); ctx.lineTo(cx,cy+r); ctx.lineTo(cx-r,cy); ctx.fillStyle='#ffcc00'; ctx.fill();
-                ctx.fillStyle='#ffaa00'; ctx.font=`${cs*0.4}px "Segoe UI"`; ctx.fillText("💎", cx-cs*0.18, cy+cs*0.15);
+
+            // ---- diamonds ----
+            const now = performance.now();
+            for (let d of s.diamonds) {
+                const cx = offX + d[1]*cs + cs/2, cy = offY + d[0]*cs + cs/2;
+                const r = cs * 0.32;
+                const sparkle = 0.7 + 0.3 * Math.sin(now*0.005 + d[0]*d[1]);
+                // diamond shape
+                ctx.save();
+                ctx.translate(cx, cy);
+                ctx.rotate(Math.PI/4);
+                ctx.fillStyle = `rgba(255,200,50,${sparkle})`;
+                ctx.shadowColor = '#ffcc00';
+                ctx.shadowBlur = 6 * sparkle;
+                ctx.beginPath();
+                ctx.moveTo(0, -r);
+                ctx.lineTo(r*0.6, 0);
+                ctx.lineTo(0, r);
+                ctx.lineTo(-r*0.6, 0);
+                ctx.closePath();
+                ctx.fill();
+                // inner highlight
+                ctx.fillStyle = `rgba(255,255,200,${sparkle*0.7})`;
+                ctx.beginPath();
+                ctx.moveTo(0, -r*0.45);
+                ctx.lineTo(r*0.25, 0);
+                ctx.lineTo(0, r*0.45);
+                ctx.lineTo(-r*0.25, 0);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+                ctx.restore();
             }
-            const gx = offX + s.goal[1]*cs, gy = offY + s.goal[0]*cs;
-            ctx.fillStyle='#ffaa44'; ctx.fillRect(gx,gy,cs,cs);
-            ctx.fillStyle='white'; ctx.font=`${cs*0.5}px "Segoe UI"`; ctx.fillText("⭐", gx+cs*0.25, gy+cs*0.7);
-            const px = offX + s.player[1]*cs + cs/2, py = offY + s.player[0]*cs + cs/2;
-            ctx.beginPath(); ctx.arc(px,py,cs*0.4,0,Math.PI*2); ctx.fillStyle='#44ff44'; ctx.shadowBlur=8; ctx.fill(); ctx.shadowBlur=0;
+
+            // ---- goal portal ----
+            const gx = offX + s.goal[1]*cs + cs/2;
+            const gy = offY + s.goal[0]*cs + cs/2;
+            const glow = 0.5 + 0.5 * Math.sin(this._goalGlow);
+            // outer glow ring
+            for (let ring = 3; ring >= 0; ring--) {
+                const rr = cs * (0.25 + ring * 0.12) * (1 + 0.08 * glow);
+                const alpha = 0.15 - ring * 0.03;
+                ctx.fillStyle = `rgba(255,180,50,${alpha})`;
+                ctx.beginPath(); ctx.arc(gx, gy, rr, 0, Math.PI*2); ctx.fill();
+            }
+            // star icon
+            ctx.fillStyle = '#fff';
+            ctx.font = `${cs*0.55}px "Segoe UI"`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.shadowColor = '#ffaa00';
+            ctx.shadowBlur = 10 + 5 * glow;
+            ctx.fillText('⭐', gx, gy);
+            ctx.shadowBlur = 0;
+            ctx.textAlign = 'start'; ctx.textBaseline = 'alphabetic';
+
+            // ---- player ----
+            let pr, pc;
+            if (this._animTo) {
+                // Interpolate between _animFrom and _animTo
+                const elapsed = now - this._animStart;
+                const t = Math.min(elapsed / this._animDur, 1.0);
+                const ease = t < 0.5 ? 2*t*t : -1+(4-2*t)*t;  // easeInOutQuad
+                pr = this._animFrom[0] + (this._animTo[0] - this._animFrom[0]) * ease;
+                pc = this._animFrom[1] + (this._animTo[1] - this._animFrom[1]) * ease;
+                if (t >= 1.0) {
+                    this._animFrom = null; this._animTo = null;
+                    if (s.won) {
+                        // show victory overlay, keep rendering
+                    } else if (this._particles.length === 0) {
+                        // render one final frame then stop loop
+                    }
+                }
+            } else {
+                pr = s.player[0]; pc = s.player[1];
+            }
+            const px = offX + pc*cs + cs/2;
+            const py = offY + pr*cs + cs/2;
+            const playerR = cs * 0.38;
+            // glow
+            ctx.fillStyle = 'rgba(68,255,68,0.2)';
+            ctx.beginPath(); ctx.arc(px, py, playerR*1.5, 0, Math.PI*2); ctx.fill();
+            // body
+            const bodyGrad = ctx.createRadialGradient(px-playerR*0.3, py-playerR*0.3, playerR*0.1, px, py, playerR);
+            bodyGrad.addColorStop(0, '#88ff88');
+            bodyGrad.addColorStop(0.6, '#22cc44');
+            bodyGrad.addColorStop(1, '#118822');
+            ctx.fillStyle = bodyGrad;
+            ctx.shadowColor = '#44ff44';
+            ctx.shadowBlur = 10;
+            ctx.beginPath(); ctx.arc(px, py, playerR, 0, Math.PI*2); ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // ---- particles ----
+            for (let p of this._particles) {
+                const alpha = Math.max(0, p.life / p.maxLife);
+                const size = 2 + 4 * alpha;
+                ctx.fillStyle = p.color.replace(')', `,${alpha})`).replace('rgb', 'rgba');
+                if (p.color.startsWith('#')) {
+                    ctx.globalAlpha = alpha;
+                    ctx.fillStyle = p.color;
+                }
+                ctx.beginPath(); ctx.arc(p.x, p.y, size, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            // ---- HUD (bottom-left overlay) ----
+            this._drawHUD(ctx, s, offX, offY, rows, cs);
+
+            // ---- victory overlay ----
+            if (s.won) {
+                this._drawVictory(ctx, s);
+            }
         }
+
+        _drawHUD(ctx, s, offX, offY, rows, cs) {
+            const hudX = offX + 10;
+            const hudY = offY + rows*cs + 6;
+            ctx.fillStyle = 'rgba(0,0,0,0.6)';
+            ctx.beginPath(); ctx.roundRect(hudX-4, hudY-2, 340, 28, 8); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.font = '13px "Segoe UI"';
+            ctx.textAlign = 'start';
+            const pct = s.totalDiamonds > 0 ? Math.round(s.collectedDiamonds/s.totalDiamonds*100) : 0;
+            ctx.fillText(`步数: ${s.moves}  |  💎 ${s.collectedDiamonds}/${s.totalDiamonds} (${pct}%)  |  ⭐ ${s.score}分`, hudX, hudY+18);
+        }
+
+        _drawVictory(ctx, s) {
+            const w = gameCanvas.width, h = gameCanvas.height;
+            ctx.fillStyle = 'rgba(0,0,0,0.75)';
+            ctx.fillRect(0, 0, w, h);
+            // panel
+            const pw = 420, ph = 260;
+            const px = (w-pw)/2, py = (h-ph)/2;
+            ctx.fillStyle = 'rgba(20,25,35,0.95)';
+            ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 20); ctx.fill();
+            ctx.strokeStyle = '#ffaa00';
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(px, py, pw, ph, 20); ctx.stroke();
+            // title
+            ctx.fillStyle = '#ffaa00';
+            ctx.font = 'bold 32px "Segoe UI"';
+            ctx.textAlign = 'center';
+            ctx.fillText('🏆 到达出口！', w/2, py+50);
+            // stats
+            ctx.fillStyle = '#fff';
+            ctx.font = '18px "Segoe UI"';
+            const pct = Math.round(s._winRate);
+            ctx.fillText(`钻石收集: ${s.collectedDiamonds}/${s.totalDiamonds} (${pct}%)`, w/2, py+95);
+            ctx.fillText(`步数: ${s.moves}  |  基础分: ${s.score - s._winBonus}`, w/2, py+125);
+            ctx.fillStyle = '#ffcc00';
+            ctx.fillText(`${s._winMsg}  +${s._winBonus} 分`, w/2, py+160);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 22px "Segoe UI"';
+            ctx.fillText(`总分: ${s.score}`, w/2, py+200);
+            // hint
+            ctx.fillStyle = '#888';
+            ctx.font = '14px "Segoe UI"';
+            ctx.fillText(evalMode || demoActive ? '自动进行中...' : '点击"生成新迷宫"开始下一局', w/2, py+235);
+            ctx.textAlign = 'start';
+        }
+
         getScore() { return this.state ? this.state.score : 0; }
         getDiamonds() {
             if (!this.state) return { collected: 0, total: 0 };
@@ -416,168 +697,550 @@
         }
         _updateUI() {
             const scoreSpan = document.getElementById('score');
-            if(scoreSpan) scoreSpan.innerText = this.state.score;
+            if (scoreSpan) scoreSpan.innerText = this.state.score;
             const collectedSpan = document.getElementById('collectedDiamonds');
             const totalSpan = document.getElementById('totalDiamonds');
-            if(collectedSpan) collectedSpan.innerText = this.state.collectedDiamonds;
-            if(totalSpan) totalSpan.innerText = this.state.totalDiamonds;
+            if (collectedSpan) collectedSpan.innerText = this.state.collectedDiamonds;
+            if (totalSpan) totalSpan.innerText = this.state.totalDiamonds;
         }
         recomputeShortestPath() {
             if (!this.state) return [];
-            const maze = this.state.maze;
-            const start = this.state.player;
-            const goal = this.state.goal;
+            const maze = this.state.maze, start = this.state.player, goal = this.state.goal;
             const h = maze.length, w = maze[0].length;
-
-            console.log('🔍 起点 (行,列):', start, '终点:', goal);
-
-            const dirs = [
-                [-1, 0, 'up'],
-                [1, 0, 'down'],
-                [0, -1, 'left'],
-                [0, 1, 'right']
-            ];
-
-            const queue = [{x: start[1], y: start[0], path: []}];
+            const dirs = [[-1,0,'up'],[1,0,'down'],[0,-1,'left'],[0,1,'right']];
+            const queue = [{x:start[1], y:start[0], path:[]}];
             const visited = Array(h).fill().map(()=>Array(w).fill(false));
             visited[start[0]][start[1]] = true;
-
             while (queue.length) {
-                let {x, y, path} = queue.shift();
-                if (x === goal[1] && y === goal[0]) {
-                    console.log('✅ 找到路径，步数:', path.length);
-                    console.log('路径方向序列:', path);
-                    // 打印迷宫局部（以起点为中心）
-                    console.log('迷宫局部（起点周围5x5，S=起点，G=终点，█=墙）：');
-                    for (let r = Math.max(0, start[0]-2); r <= Math.min(h-1, start[0]+2); r++) {
-                        let row = '';
-                        for (let c = Math.max(0, start[1]-2); c <= Math.min(w-1, start[1]+2); c++) {
-                            let ch = maze[r][c] === 0 ? '·' : '█';
-                            if (r === start[0] && c === start[1]) ch = 'S';
-                            if (r === goal[0] && c === goal[1]) ch = 'G';
-                            row += ch + ' ';
-                        }
-                        console.log(row);
-                    }
-                    return path;
-                }
-                for (let [dy, dx, dir] of dirs) {
-                    let ny = y + dy;
-                    let nx = x + dx;
+                let {x,y,path} = queue.shift();
+                if (x===goal[1] && y===goal[0]) return path;
+                for (let [dy,dx,dir] of dirs) {
+                    let ny=y+dy, nx=x+dx;
                     if (nx>=0 && nx<w && ny>=0 && ny<h && maze[ny][nx]===0 && !visited[ny][nx]) {
-                        visited[ny][nx] = true;
-                        queue.push({x: nx, y: ny, path: [...path, dir]});
+                        visited[ny][nx]=true;
+                        queue.push({x:nx, y:ny, path:[...path,dir]});
                     }
                 }
             }
-            console.warn('❌ 未找到路径');
             return [];
         }
     }
 
-    // ==================== 贪吃蛇游戏（完整） ====================
+    // ==================== 贪吃蛇游戏（脑控优化版） ====================
     class SnakeGame extends BaseGame {
-        constructor() { super(); this.state = null; }
+        constructor() {
+            super();
+            this.state = null;
+            this._tickTimer = null;
+            this._gameOver = false;
+        }
+
         init() {
+            this._stopLoop();
+            const gridSize = 25;  // 25×25 on 800×800 canvas → 32px per cell
+            const mid = Math.floor(gridSize / 2);
             this.state = {
-                snake: [[5,5], [5,4], [5,3]],
+                snake: [[mid, mid - 2], [mid, mid - 3], [mid, mid - 4]],
                 direction: 'right',
-                food: [5,7],
-                score: 0
+                nextDirection: 'right',
+                food: [mid, mid + 3],
+                score: 0,
+                gridSize: gridSize,
+                cellSize: Math.floor(gameCanvas.width / gridSize),
+                alive: true,
+                tickMs: 280,
+                growPending: 0
             };
+            this._gameOver = false;
+            this._spawnFood();
+            this._startLoop();
             this._updateUI();
         }
-        handleMove(cmd) {
-            if (!this.state) return;
-            let newDir = null;
-            switch(cmd) {
-                case 'up': newDir = 'up'; break;
-                case 'down': newDir = 'down'; break;
-                case 'left': newDir = 'left'; break;
-                case 'right': newDir = 'right'; break;
+
+        // ---- game loop ----
+        _startLoop() {
+            this._stopLoop();
+            this._tickTimer = setInterval(() => this._tick(), this.state.tickMs);
+        }
+        _stopLoop() {
+            if (this._tickTimer) { clearInterval(this._tickTimer); this._tickTimer = null; }
+        }
+
+        _tick() {
+            const s = this.state;
+            if (!s || !s.alive) return;
+
+            // Apply queued direction
+            s.direction = s.nextDirection;
+
+            // Move head
+            const head = s.snake[0];
+            let newHead;
+            switch (s.direction) {
+                case 'up':    newHead = [head[0] - 1, head[1]]; break;
+                case 'down':  newHead = [head[0] + 1, head[1]]; break;
+                case 'left':  newHead = [head[0], head[1] - 1]; break;
+                case 'right': newHead = [head[0], head[1] + 1]; break;
                 default: return;
             }
-            const opposite = {up:'down', down:'up', left:'right', right:'left'};
-            if (newDir !== opposite[this.state.direction]) {
-                this.state.direction = newDir;
-                let head = this.state.snake[0];
-                let newHead = [...head];
-                switch(this.state.direction) {
-                    case 'up': newHead[0]--; break;
-                    case 'down': newHead[0]++; break;
-                    case 'left': newHead[1]--; break;
-                    case 'right': newHead[1]++; break;
+
+            // Wall collision → game over (no wrap for brain control fairness)
+            if (newHead[0] < 0 || newHead[0] >= s.gridSize ||
+                newHead[1] < 0 || newHead[1] >= s.gridSize) {
+                this._die();
+                return;
+            }
+
+            // Self-collision → game over
+            for (let i = 0; i < s.snake.length; i++) {
+                if (s.snake[i][0] === newHead[0] && s.snake[i][1] === newHead[1]) {
+                    this._die();
+                    return;
                 }
-                this.state.snake.unshift(newHead);
-                if(newHead[0]===this.state.food[0] && newHead[1]===this.state.food[1]) {
-                    this.state.score += 10;
-                    this.state.food = [Math.floor(Math.random()*20), Math.floor(Math.random()*20)];
-                    this._updateUI();
-                } else {
-                    this.state.snake.pop();
+            }
+
+            // Move
+            s.snake.unshift(newHead);
+
+            // Eat food?
+            if (newHead[0] === s.food[0] && newHead[1] === s.food[1]) {
+                s.score += 10;
+                s.growPending += 1;
+                this._spawnFood();
+                // Speed up slightly
+                if (s.tickMs > 120) {
+                    s.tickMs = Math.max(120, s.tickMs - 5);
+                    this._startLoop();  // restart timer with new interval
                 }
-                this.render(gameCtx);
+            } else if (s.growPending > 0) {
+                s.growPending--;
+            } else {
+                s.snake.pop();
+            }
+
+            this.render(gameCtx);
+            this._updateUI();
+        }
+
+        _spawnFood() {
+            const s = this.state;
+            const occupied = new Set(s.snake.map(p => p[0] * 1000 + p[1]));
+            const candidates = [];
+            for (let r = 0; r < s.gridSize; r++)
+                for (let c = 0; c < s.gridSize; c++)
+                    if (!occupied.has(r * 1000 + c)) candidates.push([r, c]);
+            if (candidates.length > 0)
+                s.food = candidates[Math.floor(Math.random() * candidates.length)];
+        }
+
+        _die() {
+            const s = this.state;
+            s.alive = false;
+            this._gameOver = true;
+            this._stopLoop();
+            this.render(gameCtx);
+            setTimeout(() => {
+                if (this._gameOver && currentGame === 'snake' && !demoActive && !evalMode) {
+                    this.init();
+                }
+            }, 2000);
+        }
+
+        // ---- brain / keyboard input ----
+        handleMove(cmd) {
+            const s = this.state;
+            if (!s || !s.alive) return;
+            const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
+            // Prevent 180° reversal
+            if (cmd !== opposite[s.direction]) {
+                s.nextDirection = cmd;
             }
         }
+
+        // ---- rendering ----
         render(ctx) {
-            const cs = 20;
-            const offX = (gameCanvas.width - 20*cs)/2, offY = (gameCanvas.height - 20*cs)/2;
-            ctx.clearRect(0,0,gameCanvas.width,gameCanvas.height);
-            for(let seg of this.state.snake) {
-                ctx.fillStyle = '#33ff33';
-                ctx.fillRect(offX + seg[1]*cs, offY + seg[0]*cs, cs-1, cs-1);
+            const s = this.state;
+            const cs = s.cellSize;
+            const gs = s.gridSize;
+            const totalW = gs * cs;
+            const offX = (gameCanvas.width - totalW) / 2;
+            const offY = (gameCanvas.height - totalW) / 2;
+
+            ctx.clearRect(0, 0, gameCanvas.width, gameCanvas.height);
+
+            // Grid background
+            ctx.fillStyle = '#1a1a2e';
+            ctx.fillRect(offX, offY, totalW, totalW);
+
+            // Grid lines
+            ctx.strokeStyle = '#16213e';
+            ctx.lineWidth = 0.5;
+            for (let i = 0; i <= gs; i++) {
+                ctx.beginPath();
+                ctx.moveTo(offX, offY + i * cs);
+                ctx.lineTo(offX + totalW, offY + i * cs);
+                ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(offX + i * cs, offY);
+                ctx.lineTo(offX + i * cs, offY + totalW);
+                ctx.stroke();
             }
-            ctx.fillStyle = '#ff3333';
-            ctx.fillRect(offX + this.state.food[1]*cs, offY + this.state.food[0]*cs, cs-1, cs-1);
+
+            // Food (pulsing)
+            const pulse = 1 + 0.15 * Math.sin(Date.now() / 200);
+            const [fr, fc] = s.food;
+            const fx = offX + fc * cs + cs / 2, fy = offY + fr * cs + cs / 2;
+            const frr = cs * 0.35 * pulse;
+            ctx.beginPath();
+            ctx.arc(fx, fy, frr, 0, Math.PI * 2);
+            ctx.fillStyle = '#ff4444';
+            ctx.fill();
+            ctx.shadowColor = '#ff0000';
+            ctx.shadowBlur = 12;
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Snake body
+            for (let i = s.snake.length - 1; i >= 0; i--) {
+                const [r, c] = s.snake[i];
+                const sx = offX + c * cs + 2, sy = offY + r * cs + 2;
+                const sw = cs - 4, sh = cs - 4;
+                const t = i / Math.max(1, s.snake.length - 1);  // 0=head, 1=tail
+
+                if (i === 0) {
+                    // Head
+                    const grad = ctx.createLinearGradient(sx, sy, sx + sw, sy + sh);
+                    grad.addColorStop(0, '#00ff88');
+                    grad.addColorStop(1, '#00cc66');
+                    ctx.fillStyle = grad;
+                    ctx.shadowColor = '#00ff88';
+                    ctx.shadowBlur = 8;
+                } else {
+                    // Body segments – gradient from bright green to darker
+                    const r = Math.floor(30 + 180 * (1 - t));
+                    const g = Math.floor(200 + 55 * t);
+                    const b = Math.floor(50 + 50 * t);
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                    ctx.shadowBlur = 0;
+                }
+                ctx.beginPath();
+                ctx.roundRect(sx, sy, sw, sh, cs * 0.3);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // Game over overlay
+            if (!s.alive) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(offX, offY, totalW, totalW);
+                ctx.fillStyle = '#ff4444';
+                ctx.font = 'bold 48px "Segoe UI"';
+                ctx.textAlign = 'center';
+                ctx.fillText('游戏结束', offX + totalW / 2, offY + totalW / 2 - 10);
+                ctx.fillStyle = '#fff';
+                ctx.font = '24px "Segoe UI"';
+                ctx.fillText(`得分: ${s.score}  |  2秒后重开`, offX + totalW / 2, offY + totalW / 2 + 40);
+                ctx.textAlign = 'start';
+            }
+
+            // Score on canvas
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 16px "Segoe UI"';
+            ctx.textAlign = 'center';
+            ctx.fillText(`🐍 贪吃蛇 | 得分: ${s.score}`, gameCanvas.width / 2, offY - 12);
+            ctx.textAlign = 'start';
         }
+
+        stop() { this._gameOver = false; this._stopLoop(); }
         getScore() { return this.state ? this.state.score : 0; }
+        getDiamonds() { return { collected: 0, total: 0 }; }
+
         _updateUI() {
             const scoreSpan = document.getElementById('score');
-            if(scoreSpan) scoreSpan.innerText = this.state.score;
+            if (scoreSpan) scoreSpan.innerText = this.state.score;
             const collectedSpan = document.getElementById('collectedDiamonds');
             const totalSpan = document.getElementById('totalDiamonds');
-            if(collectedSpan) collectedSpan.innerText = 0;
-            if(totalSpan) totalSpan.innerText = 0;
+            if (collectedSpan) collectedSpan.innerText = '-';
+            if (totalSpan) totalSpan.innerText = '-';
         }
     }
 
-    // ==================== 赛车游戏（完整） ====================
+    // ==================== 赛车游戏（脑控优化版） ====================
+    // ==================== 赛车游戏（运动想象连续控制版） ====================
+    // 控制方式：MI 解码输出 left / right / up / down，连续渐进控制方向与速度
+    // left  → 向左微调方向（累积效应）
+    // right → 向右微调方向
+    // up    → 加速
+    // down  → 减速
     class RacingGame extends BaseGame {
-        constructor() { super(); this.state = null; }
+        constructor() {
+            super();
+            this.state = null;
+            this._animId = null;
+            this._gameOver = false;
+            this._lastTime = 0;
+        }
+
         init() {
-            this.state = { position: 0.5, speed: 5, score: 0 };
+            this._stopLoop();
+            const w = gameCanvas.width;
+            const h = gameCanvas.height;
+            const roadLeft = w * 0.12;
+            const roadRight = w * 0.88;
+
+            this.state = {
+                roadLeft: roadLeft,
+                roadRight: roadRight,
+                roadW: roadRight - roadLeft,   // total drivable width in pixels
+                carX: w / 2,                   // car center x (pixel, continuous)
+                steerMomentum: 0,              // lateral velocity (px/s), decays over time
+                steerAmount: 80,               // px/s added per left/right command (MI incremental)
+                steerDecay: 3.0,               // momentum decay rate (per second)
+                speed: 180,                    // forward speed (px/s)
+                baseSpeed: 180,
+                maxSpeed: 500,
+                minSpeed: 60,
+                accelAmount: 30,               // px/s² per up command
+                brakeAmount: 40,               // px/s² per down command
+                score: 0,
+                distance: 0,
+                alive: true,
+                obstacles: [],                 // { x, y, w, h }
+                obstacleTimer: 0,
+                obstacleInterval: 1.2,         // seconds between spawns
+                roadOffset: 0,                 // scrolling dashes
+                carW: 48,
+                carH: 80,
+            };
+            this._gameOver = false;
+            this._lastTime = performance.now();
+            this._startLoop();
             this._updateUI();
         }
-        handleMove(cmd) {
-            if (!this.state) return;
-            switch(cmd) {
-                case 'left': this.state.position = Math.max(0, this.state.position - 0.05); break;
-                case 'right': this.state.position = Math.min(1, this.state.position + 0.05); break;
-                case 'up': this.state.speed = Math.min(20, this.state.speed + 1); break;
-                case 'down': this.state.speed = Math.max(1, this.state.speed - 1); break;
+
+        _startLoop() {
+            this._stopLoop();
+            this._lastTime = performance.now();
+            const loop = (now) => {
+                if (!this.state || !this.state.alive) { this._animId = null; return; }
+                this._update(now);
+                this.render(gameCtx);
+                this._animId = requestAnimationFrame(loop);
+            };
+            this._animId = requestAnimationFrame(loop);
+        }
+        _stopLoop() {
+            if (this._animId) { cancelAnimationFrame(this._animId); this._animId = null; }
+        }
+
+        _update(now) {
+            const s = this.state;
+            const dt = Math.min((now - this._lastTime) / 1000, 0.1);
+            this._lastTime = now;
+
+            // ---- steering with momentum ----
+            // Apply momentum (decayed each frame)
+            s.steerMomentum *= Math.exp(-s.steerDecay * dt);
+            // Clamp tiny momentum to zero (avoid drift)
+            if (Math.abs(s.steerMomentum) < 0.5) s.steerMomentum = 0;
+            // Update car position
+            s.carX += s.steerMomentum * dt;
+            // Clamp to road edges (with half-car margin)
+            const halfCar = s.carW / 2 + 4;
+            s.carX = Math.max(s.roadLeft + halfCar, Math.min(s.roadRight - halfCar, s.carX));
+            // Stop momentum if hitting edge
+            if (s.carX <= s.roadLeft + halfCar + 1 || s.carX >= s.roadRight - halfCar - 1) {
+                s.steerMomentum = 0;
             }
-            this.state.score += Math.floor(this.state.speed);
-            this._updateUI();
+
+            // ---- forward movement ----
+            s.distance += s.speed * dt;
+            s.score = Math.floor(s.distance / 10);
+            s.roadOffset = (s.roadOffset + s.speed * dt) % 50;
+
+            // ---- obstacles ----
+            s.obstacleTimer += dt;
+            if (s.obstacleTimer >= s.obstacleInterval) {
+                s.obstacleTimer = 0;
+                s.obstacleInterval = 0.6 + Math.random() * 1.5 / Math.min(s.speed / s.baseSpeed, 2.5);
+                this._spawnObstacle();
+            }
+            for (let obs of s.obstacles) obs.y += s.speed * dt;
+            s.obstacles = s.obstacles.filter(o => o.y < gameCanvas.height + 150);
+
+            // ---- collision (AABB) ----
+            const cl = s.carX - s.carW / 2 + 6;
+            const cr = s.carX + s.carW / 2 - 6;
+            const ct = gameCanvas.height - 130;
+            const cb = gameCanvas.height - 30;
+            for (let obs of s.obstacles) {
+                if (cl < obs.x + obs.w && cr > obs.x && ct < obs.y + obs.h && cb > obs.y) {
+                    this._die(); return;
+                }
+            }
+        }
+
+        _spawnObstacle() {
+            const s = this.state;
+            const margin = s.carW;
+            const availWidth = s.roadW - margin * 2;
+            // Random x anywhere on road (continuous, not lane-locked)
+            const ox = s.roadLeft + margin + Math.random() * availWidth;
+            s.obstacles.push({
+                x: ox - s.carW / 2,
+                y: -120 - Math.random() * 250,
+                w: s.carW,
+                h: s.carH
+            });
+        }
+
+        _die() {
+            const s = this.state;
+            s.alive = false;
+            this._gameOver = true;
             this.render(gameCtx);
+            setTimeout(() => {
+                if (this._gameOver && currentGame === 'racing' && !demoActive && !evalMode) {
+                    this.init();
+                }
+            }, 2000);
         }
+
+        // ---- brain / keyboard (MI-style continuous incremental control) ----
+        handleMove(cmd) {
+            const s = this.state;
+            if (!s || !s.alive) return;
+            switch (cmd) {
+                case 'left':
+                    // Add leftward momentum (cumulative with repeated MI commands)
+                    s.steerMomentum -= s.steerAmount;
+                    s.steerMomentum = Math.max(s.steerMomentum, -400);
+                    break;
+                case 'right':
+                    s.steerMomentum += s.steerAmount;
+                    s.steerMomentum = Math.min(s.steerMomentum, 400);
+                    break;
+                case 'up':
+                    s.speed = Math.min(s.maxSpeed, s.speed + s.accelAmount);
+                    break;
+                case 'down':
+                    s.speed = Math.max(s.minSpeed, s.speed - s.brakeAmount);
+                    break;
+            }
+        }
+
+        // ---- rendering ----
         render(ctx) {
-            ctx.clearRect(0,0,gameCanvas.width,gameCanvas.height);
-            const roadW = gameCanvas.width * 0.6;
-            const carW = 40;
-            const carX = gameCanvas.width/2 - carW/2 + (this.state.position-0.5)*(roadW-carW);
-            ctx.fillStyle = '#555';
-            ctx.fillRect(0, gameCanvas.height-100, gameCanvas.width, 100);
-            ctx.fillStyle = '#ff0000';
-            ctx.fillRect(carX, gameCanvas.height-80, carW, 60);
+            const s = this.state;
+            const w = gameCanvas.width, h = gameCanvas.height;
+
+            ctx.clearRect(0, 0, w, h);
+
+            // Grass
+            ctx.fillStyle = '#2d5a27';
+            ctx.fillRect(0, 0, w, h);
+
+            // Road
+            const roadGrad = ctx.createLinearGradient(s.roadLeft, 0, s.roadRight, 0);
+            roadGrad.addColorStop(0, '#3a3a3a');
+            roadGrad.addColorStop(0.08, '#555');
+            roadGrad.addColorStop(0.92, '#555');
+            roadGrad.addColorStop(1, '#3a3a3a');
+            ctx.fillStyle = roadGrad;
+            ctx.fillRect(s.roadLeft, 0, s.roadRight - s.roadLeft, h);
+
+            // Road edges
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.moveTo(s.roadLeft, 0); ctx.lineTo(s.roadLeft, h); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(s.roadRight, 0); ctx.lineTo(s.roadRight, h); ctx.stroke();
+
+            // Centre dashes (scrolling)
+            ctx.strokeStyle = '#ccc';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([25, 25]);
+            const cx = (s.roadLeft + s.roadRight) / 2;
+            ctx.beginPath(); ctx.moveTo(cx, s.roadOffset); ctx.lineTo(cx, h); ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Obstacles
+            for (let obs of s.obstacles) {
+                const hue = (obs.y * 0.3 + Date.now() * 0.01) % 360;
+                this._drawCar(ctx, obs.x + obs.w / 2, obs.y + obs.h / 2, obs.w, obs.h, '#e74c3c');
+            }
+
+            // Player car
+            this._drawCar(ctx, s.carX, h - 80, s.carW, s.carH, '#2196F3');
+
+            // Speed bar (right side)
+            const speedPct = (s.speed - s.minSpeed) / (s.maxSpeed - s.minSpeed);
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(w - 56, 12, 44, h - 24);
+            const barH = (h - 24) * speedPct;
+            const gradBar = ctx.createLinearGradient(0, h - 12, 0, 12);
+            gradBar.addColorStop(0, '#4caf50'); gradBar.addColorStop(0.5, '#ffeb3b'); gradBar.addColorStop(1, '#f44336');
+            ctx.fillStyle = gradBar;
+            ctx.fillRect(w - 54, h - 12 - barH, 40, barH);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(Math.floor(s.speed), w - 34, 30);
+            ctx.fillText('km/h', w - 34, h - 2);
+            ctx.textAlign = 'start';
+
+            // Steering indicator (small bar below speed)
+            const steerPct = s.steerMomentum / 400;  // -1..1
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.fillRect(w - 70, 48, 72, 10);
+            ctx.fillStyle = '#ff9800';
+            const indicatorX = w - 34 + steerPct * 30;
+            ctx.fillRect(indicatorX - 4, 49, 8, 8);
+
+            // HUD
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px "Segoe UI"'; ctx.textAlign = 'center';
+            ctx.fillText(`🏎️  得分: ${s.score}  |  距离: ${Math.floor(s.distance)} m`, w / 2, 24);
+            ctx.textAlign = 'start';
+
+            // Game over overlay
+            if (!s.alive) {
+                ctx.fillStyle = 'rgba(0,0,0,0.7)';
+                ctx.fillRect(0, 0, w, h);
+                ctx.fillStyle = '#ff4444'; ctx.font = 'bold 48px "Segoe UI"'; ctx.textAlign = 'center';
+                ctx.fillText('💥 撞车!', w / 2, h / 2 - 20);
+                ctx.fillStyle = '#fff'; ctx.font = '24px "Segoe UI"';
+                ctx.fillText(`得分: ${s.score}  |  2秒后重开`, w / 2, h / 2 + 30);
+                ctx.textAlign = 'start';
+            }
         }
+
+        _drawCar(ctx, cx, cy, w, h, color) {
+            ctx.save();
+            ctx.fillStyle = color;
+            ctx.beginPath(); ctx.roundRect(cx - w / 2, cy - h / 2, w, h, 8); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.25)';
+            ctx.fillRect(cx - w * 0.35, cy - h * 0.18, w * 0.7, h * 0.22);
+            ctx.fillStyle = '#111';
+            ctx.fillRect(cx - w / 2 - 4, cy - h * 0.35, 8, h * 0.22);
+            ctx.fillRect(cx - w / 2 - 4, cy + h * 0.13, 8, h * 0.22);
+            ctx.fillRect(cx + w / 2 - 4, cy - h * 0.35, 8, h * 0.22);
+            ctx.fillRect(cx + w / 2 - 4, cy + h * 0.13, 8, h * 0.22);
+            ctx.fillStyle = '#ffff88';
+            ctx.fillRect(cx - w * 0.3, cy - h / 2 + 4, w * 0.25, 6);
+            ctx.fillRect(cx + w * 0.05, cy - h / 2 + 4, w * 0.25, 6);
+            ctx.restore();
+        }
+
+        stop() { this._gameOver = false; this._stopLoop(); }
         getScore() { return this.state ? this.state.score : 0; }
+        getDiamonds() { return { collected: 0, total: 0 }; }
+
         _updateUI() {
             const scoreSpan = document.getElementById('score');
-            if(scoreSpan) scoreSpan.innerText = this.state.score;
+            if (scoreSpan) scoreSpan.innerText = this.state.score;
             const collectedSpan = document.getElementById('collectedDiamonds');
             const totalSpan = document.getElementById('totalDiamonds');
-            if(collectedSpan) collectedSpan.innerText = 0;
-            if(totalSpan) totalSpan.innerText = 0;
+            if (collectedSpan) collectedSpan.innerText = '-';
+            if (totalSpan) totalSpan.innerText = '-';
         }
     }
 
@@ -591,6 +1254,7 @@
     function switchGame(gameType) {
         if (demoActive) stopDemo();
         if (evalMode) stopEvalMode();
+        if (activeGame) activeGame.stop();  // cleanup previous game's timers
         currentGame = gameType;
         document.querySelectorAll('#offline-panel .game-selector button').forEach(b => b.classList.remove('active'));
         document.getElementById('btn-maze').classList.toggle('active', gameType==='maze');
@@ -693,6 +1357,13 @@
         }
         if (demoTimeoutId) clearTimeout(demoTimeoutId);
         if (!demoActive || demoStopFlag) return;
+
+        // 忽略过期消息：结果对应的步骤与当前步骤不一致
+        const currentExpected = demoPath[demoCurrentStep];
+        if (result.expected !== currentExpected) {
+            console.warn(`[Demo] 忽略过期结果: 收到 ${result.expected}，当前期望 ${currentExpected}，步骤 ${demoCurrentStep+1}`);
+            return;
+        }
 
         const expected = result.expected;
         const decoded = result.decoded;

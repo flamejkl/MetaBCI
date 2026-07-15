@@ -59,7 +59,7 @@ class GrowingWindowDecoder:
 
         # ---- pre-compute filter coefficients ONCE ----
         fs = self.sample_rate
-        self._sos = butter(4, [7, 18], btype='bandpass', fs=fs, output='sos')
+        self._sos = butter(4, [7, 22], btype='bandpass', fs=fs, output='sos')
 
         # ---- cache for forced-output reuse ----
         self._cached_window = None
@@ -267,13 +267,9 @@ class GrowingWindowDecoder:
         self._ema_var = (1 - alpha) * self._ema_var + alpha * (delta * delta)
 
     def _normalise(self, sample):
-        """Apply z-score normalisation: (x - μ) / σ.
-        During warm-up, only subtract mean (no scaling) to avoid amplifying noise."""
-        std = np.sqrt(np.maximum(self._ema_var, self._eps))
-        if self._ema_count < self._ema_warmup:
-            # Warm-up: only de-mean, don't scale
-            return sample - self._ema_mean
-        return (sample - self._ema_mean) / std
+        """Subtract running mean to remove DC drift (consistent with training demeaning).
+        Does NOT divide by std — the model expects raw-scale data."""
+        return sample - self._ema_mean
 
     # ------------------------------------------------------------------
     #  Layer 3 – adaptive threshold
