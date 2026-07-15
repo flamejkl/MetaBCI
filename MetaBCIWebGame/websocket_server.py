@@ -3,9 +3,9 @@ print("WS FILE =", __file__, flush=True)
 print("🔥🔥🔥 统一管道版 websocket_server.py 已加载 🔥🔥🔥")
 import sys
 import os
-_METABCI_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..', 'MetaBCI')
-if os.path.isdir(_METABCI_ROOT):
-    sys.path.insert(0, os.path.abspath(_METABCI_ROOT))
+_METABCI_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'metabci')
+if os.path.isdir(os.path.join(_METABCI_ROOT, 'brainda')):
+    sys.path.insert(0, os.path.abspath(os.path.join(_METABCI_ROOT, '..')))
 
 import asyncio
 import json

@@ -26,3 +26,5 @@ from .SKLDA import SKLDA
 from .STDA import STDA
 from .dsp import DSP, FBDSP, DCPM
 from .tdca import TDCA, FBTDCA
+from .growing_window import GrowingWindowDecoder
+from .advanced_voter import AdvancedVoter
