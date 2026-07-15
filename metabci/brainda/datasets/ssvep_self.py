@@ -5,6 +5,7 @@ Self-collected SSVEP dataset for MetaBCIWebGame.
 
 Four-class SSVEP (up/down/left/right at 8.25 / 11.0 / 13.75 / 16.5 Hz),
 14-channel Neuracle acquisition, 250 Hz sampling rate, 2-second trials.
+8 subjects, 20 trials per direction per subject (80 trials/subject).
 
 Implements the BaseDataset protocol for MetaBCI compatibility and supports
 multi-subject directory layouts.
