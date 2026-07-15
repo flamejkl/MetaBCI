@@ -1,0 +1,32 @@
+# MetaBCIWebGame 依赖
+# 安装方式: pip install -r requirements.txt
+# 前置条件: MetaBCI 库需在 Python path 中（见下方说明）
+
+# ===== 核心依赖 =====
+numpy>=1.19
+scipy>=1.6
+scikit-learn>=0.24
+joblib>=1.0
+websockets>=10.0
+
+# ===== MetaBCI（脑机接口算法库）=====
+# MetaBCI 不作为 pip 包提供，需手动配置路径。
+# 克隆 MetaBCI 仓库到本项目同级目录：
+#   git clone <MetaBCI-repo-url> ../MetaBCI
+# 或在 websocket_server.py 中修改 _METABCI_ROOT 变量指向你的 MetaBCI 路径。
+
+# ===== 可选：硬件采集 =====
+# Neuracle 放大器采集（如仅离线演示可不装）:
+#   pyserial  （TriggerBox 串口通信）
+
+# ===== 可选：实验脚本 =====
+# run_ssvep_experiment.py 需要:
+#   psychopy>=2022.1
+
+# ===== 可选：训练脚本 =====
+# train_self_model.py / train_growing_window_models.py 额外需要:
+#   torch>=1.7.1
+#   mne>=0.21
+#   mat73
+#   pandas
+#   h5py
