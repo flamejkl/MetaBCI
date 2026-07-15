@@ -245,6 +245,7 @@
             this._particles = [];      // {x, y, vx, vy, life, maxLife, color}
             this._lastFrame = 0;
             this._goalGlow = 0;        // goal pulse phase
+            this._lastFaceDir = 'down'; // remember last facing direction
         }
 
         init(width = MAZE_DEFAULT_W, height = MAZE_DEFAULT_H) {
@@ -606,20 +607,32 @@
             }
             const px = offX + pc*cs + cs/2;
             const py = offY + pr*cs + cs/2;
-            const playerR = cs * 0.38;
-            // glow
-            ctx.fillStyle = 'rgba(68,255,68,0.2)';
-            ctx.beginPath(); ctx.arc(px, py, playerR*1.5, 0, Math.PI*2); ctx.fill();
-            // body
-            const bodyGrad = ctx.createRadialGradient(px-playerR*0.3, py-playerR*0.3, playerR*0.1, px, py, playerR);
-            bodyGrad.addColorStop(0, '#88ff88');
-            bodyGrad.addColorStop(0.6, '#22cc44');
-            bodyGrad.addColorStop(1, '#118822');
-            ctx.fillStyle = bodyGrad;
-            ctx.shadowColor = '#44ff44';
-            ctx.shadowBlur = 10;
-            ctx.beginPath(); ctx.arc(px, py, playerR, 0, Math.PI*2); ctx.fill();
-            ctx.shadowBlur = 0;
+            const scale = cs / 32;
+            // Walk animation: 3-frame cycle (450ms), dramatic stride
+            const bob = this._animTo ? Math.abs(Math.sin((now - this._animStart) / this._animDur * Math.PI)) * cs * 0.1 : 0;
+            const charY = py + bob;
+
+            let faceDir = this._lastFaceDir || 'down';
+            if (this._animTo) {
+                const dr = this._animTo[0] - this._animFrom[0];
+                const dc = this._animTo[1] - this._animFrom[1];
+                if (dr < 0) faceDir = 'up';
+                else if (dr > 0) faceDir = 'down';
+                else if (dc < 0) faceDir = 'left';
+                else if (dc > 0) faceDir = 'right';
+            }
+            const walking = !!this._animTo;
+            const cycleMs = 450;
+            const walkT = walking ? ((now - this._animStart) % cycleMs) / cycleMs : 0;
+            // 3-frame cycle: 0=left stride, 1=passing, 2=right stride
+            let walkFrame;
+            if (walkT < 0.33) walkFrame = 0;
+            else if (walkT < 0.66) walkFrame = 1;
+            else walkFrame = 2;
+            const stride = walking ? 3.5 * scale : 0;  // leg separation in pixels
+
+            this._drawKnight(ctx, px, charY, cs, scale, faceDir, walkFrame, stride, walkT);
+            if (walking) this._lastFaceDir = faceDir;
 
             // ---- particles ----
             for (let p of this._particles) {
@@ -641,6 +654,408 @@
             if (s.won) {
                 this._drawVictory(ctx, s);
             }
+        }
+
+        // ===== detailed knight: 4-direction + 3-frame walk + layered armor =====
+        _drawKnight(ctx, cx, cy, cs, s, dir, frame, stride, walkT) {
+            ctx.save();
+            ctx.translate(cx, cy);
+
+            // --------------- palette ---------------
+            const M  = '#d0d0d8';   // armor mid
+            const ML = '#e8e8f0';   // armor highlight
+            const MD = '#8a8a96';   // armor shadow
+            const G  = '#daa520';   // gold trim
+            const GD = '#9a7510';   // gold dark
+            const R  = '#cc2020';   // plume / cape red
+            const RD = '#881818';   // dark red
+            const B  = '#332211';   // dark brown (boots, grip)
+            const SK = '#e0c098';   // skin
+            const eyeW = '#ffffff'; // eye whites
+
+            // --------------- body layout ---------------
+            const headR  = cs * 0.18;
+            const headY  = -cs * 0.30;        // helmet centre Y
+            const bodyTop = headY + headR * 0.85;
+            const legTop  = cs * 0.18;
+            const feetBot = cs * 0.42;
+            const bodyH   = legTop - bodyTop;
+            const legLen  = feetBot - legTop;
+            const legW    = 3.5 * s;
+            const isSide  = (dir === 'left' || dir === 'right');
+            const sg      = dir === 'right' ? 1 : -1;  // side sign
+
+            // walk stride
+            const st0 = frame === 0 ? stride : (frame === 2 ? -stride : 0);
+            const st1 = frame === 2 ? stride : (frame === 0 ? -stride : 0);
+
+            // ---- ground shadow ----
+            const shY = feetBot + 1*s;
+            ctx.fillStyle = 'rgba(0,0,0,0.22)';
+            ctx.beginPath(); ctx.ellipse(0, shY, cs*0.24, cs*0.06, 0, 0, Math.PI*2); ctx.fill();
+
+            // ================================================================
+            //  CAPE  (behind everything except back view where it's prominent)
+            // ================================================================
+            if (dir === 'up') {
+                ctx.fillStyle = R;
+                ctx.beginPath();
+                ctx.moveTo(-7*s, bodyTop + 6*s);
+                ctx.lineTo(7*s, bodyTop + 6*s);
+                ctx.quadraticCurveTo(12*s, legTop, 9*s, feetBot + 4*s);
+                ctx.lineTo(-9*s, feetBot + 4*s);
+                ctx.quadraticCurveTo(-12*s, legTop, -7*s, bodyTop + 6*s);
+                ctx.fill();
+                // cape fold lines
+                ctx.strokeStyle = RD; ctx.lineWidth = 0.5;
+                ctx.beginPath(); ctx.moveTo(-2*s, bodyTop+10*s); ctx.lineTo(-4*s, feetBot); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(2*s, bodyTop+10*s); ctx.lineTo(4*s, feetBot); ctx.stroke();
+            } else if (isSide) {
+                // Small cape visible behind shoulders
+                ctx.fillStyle = R;
+                ctx.beginPath();
+                ctx.moveTo(-3*s, bodyTop + 3*s);
+                ctx.quadraticCurveTo(-5*s - sg*2*s, bodyTop + 8*s, -3*s - sg*3*s, legTop + 2*s);
+                ctx.lineTo(2*s - sg*2*s, legTop + 2*s);
+                ctx.quadraticCurveTo(0, bodyTop + 6*s, 3*s, bodyTop + 3*s);
+                ctx.fill();
+            }
+
+            // ================================================================
+            //  LEGS — greaves + poleyns (knee guards) + sabatons (armored boots)
+            // ================================================================
+            const drawLegFrontBack = (lx, off) => {
+                const y0 = legTop + off, y1 = y0 + legLen - Math.abs(off)*0.3;
+                // greave (shin guard)
+                ctx.fillStyle = M;
+                ctx.fillRect(lx, y0, legW, y1 - y0);
+                // greave highlight
+                ctx.fillStyle = ML;
+                ctx.fillRect(lx + legW*0.2, y0, legW*0.3, y1 - y0);
+                // poleyn (knee guard — round)
+                ctx.fillStyle = M;
+                ctx.beginPath();
+                ctx.arc(lx + legW/2, y0 + 1*s, legW*0.8, 0, Math.PI*2);
+                ctx.fill();
+                ctx.fillStyle = G;
+                ctx.beginPath();
+                ctx.arc(lx + legW/2, y0 + 1*s, legW*0.35, 0, Math.PI*2);
+                ctx.fill();
+                // sabaton (armored boot)
+                ctx.fillStyle = MD;
+                ctx.fillRect(lx - 1.5*s, y1 - 3*s, legW + 3*s, 4*s);
+                ctx.fillStyle = B;
+                ctx.fillRect(lx - 1*s, y1 - 1*s, legW + 2*s, 1.5*s);
+            };
+            if (isSide) {
+                const bx = -1*s;
+                // far leg
+                ctx.fillStyle = MD;
+                ctx.fillRect(bx - 1*s, legTop + st1*0.3, legW*0.7, legLen);
+                // front leg
+                const fx = bx + 5*s + st0*0.5*sg;
+                ctx.fillStyle = M;
+                ctx.fillRect(fx, legTop, legW*0.9, legLen);
+                ctx.fillStyle = ML;
+                ctx.fillRect(fx + legW*0.2, legTop, legW*0.3, legLen);
+                // knee
+                ctx.fillStyle = M;
+                ctx.beginPath(); ctx.arc(fx + legW*0.45, legTop + 1.5*s, legW*0.75, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = G;
+                ctx.beginPath(); ctx.arc(fx + legW*0.45, legTop + 1.5*s, legW*0.3, 0, Math.PI*2); ctx.fill();
+                // boot
+                ctx.fillStyle = B;
+                ctx.fillRect(fx - 2*s, legTop + legLen - 3*s, legW*0.9 + 4*s, 3.5*s);
+            } else {
+                drawLegFrontBack(-legW - 2.5*s, st0 * 0.5);
+                drawLegFrontBack(2.5*s, st1 * 0.5);
+            }
+
+            // ================================================================
+            //  TORSO — layered plates + fauld (armored skirt) + belt
+            // ================================================================
+            if (isSide) {
+                const bw = 5*s;
+                // breastplate body
+                ctx.fillStyle = M;
+                ctx.fillRect(-bw + 2*s, bodyTop, bw*2 - 2*s, bodyH);
+                // highlight curve
+                const grad = ctx.createLinearGradient(0, bodyTop, 0, legTop);
+                grad.addColorStop(0, ML); grad.addColorStop(0.5, M); grad.addColorStop(1, MD);
+                ctx.fillStyle = grad;
+                ctx.fillRect(-bw + 3*s, bodyTop, bw - 1*s, bodyH);
+                // fauld plates (horizontal strips at waist)
+                for (let j = 0; j < 3; j++) {
+                    ctx.fillStyle = j % 2 === 0 ? M : MD;
+                    ctx.fillRect(-bw + 1.5*s, legTop - 9*s + j*3*s, bw*2 - 3*s, 2.8*s);
+                }
+                // belt
+                ctx.fillStyle = G;
+                ctx.fillRect(-bw + 1*s, legTop - 4*s, bw*2 - 2*s, 2*s);
+            } else if (dir === 'up') {
+                const bwt = 6.5*s, bwb = 8.5*s;
+                // backplate
+                ctx.fillStyle = MD;
+                ctx.beginPath();
+                ctx.moveTo(-bwt, bodyTop); ctx.lineTo(bwt, bodyTop);
+                ctx.lineTo(bwb, legTop); ctx.lineTo(-bwb, legTop);
+                ctx.closePath(); ctx.fill();
+                // shoulder blades (two dark ovals)
+                ctx.fillStyle = '#707078';
+                ctx.beginPath(); ctx.ellipse(-4*s, bodyTop + 4*s, 3*s, 4*s, 0.2, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.ellipse(4*s, bodyTop + 4*s, 3*s, 4*s, -0.2, 0, Math.PI*2); ctx.fill();
+            } else {
+                // FRONT — detailed breastplate
+                const bwt = 9*s, bwb = 11*s;
+                // main chest
+                const chestGrad = ctx.createLinearGradient(0, bodyTop, 0, legTop);
+                chestGrad.addColorStop(0, ML); chestGrad.addColorStop(0.3, M); chestGrad.addColorStop(0.7, M); chestGrad.addColorStop(1, MD);
+                ctx.fillStyle = chestGrad;
+                ctx.beginPath();
+                ctx.moveTo(-bwt, bodyTop); ctx.lineTo(bwt, bodyTop);
+                ctx.lineTo(bwb, legTop); ctx.lineTo(-bwb, legTop);
+                ctx.closePath(); ctx.fill();
+                // pectoral definition (two curved lines)
+                ctx.strokeStyle = MD; ctx.lineWidth = 0.7;
+                ctx.beginPath();
+                ctx.moveTo(-5*s, bodyTop + 4*s); ctx.quadraticCurveTo(0, bodyTop + 1*s, 5*s, bodyTop + 4*s);
+                ctx.stroke();
+                // center ridge highlight
+                ctx.fillStyle = ML;
+                ctx.fillRect(-2*s, bodyTop + 3*s, 4*s, bodyH - 3*s);
+                // fauld (3 overlapping plates at waist)
+                for (let j = 0; j < 3; j++) {
+                    const py = legTop - 10*s + j*3.3*s;
+                    const pw = bwb - 2*s + j*1.5*s;
+                    ctx.fillStyle = j % 2 === 0 ? M : MD;
+                    ctx.fillRect(-pw, py, pw*2, 3*s);
+                    if (j % 2 === 0) {
+                        ctx.fillStyle = G;
+                        ctx.fillRect(-pw, py, pw*2, 0.6*s);
+                    }
+                }
+                // belt + buckle
+                ctx.fillStyle = G;
+                ctx.fillRect(-bwb + 3*s, legTop - 3.5*s, (bwb - 3*s)*2, 3*s);
+                ctx.fillStyle = GD;
+                ctx.fillRect(-2.5*s, legTop - 5*s, 5*s, 5*s);  // buckle
+                ctx.fillStyle = G;
+                ctx.fillRect(-1.5*s, legTop - 4*s, 3*s, 3*s);
+            }
+
+            // ================================================================
+            //  PAULDRONS (shoulder armor) — prominent rounded shapes
+            // ================================================================
+            if (isSide) {
+                // Near shoulder
+                ctx.fillStyle = M;
+                ctx.beginPath(); ctx.arc(5*s, bodyTop + 2*s, 5*s, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = ML;
+                ctx.beginPath(); ctx.arc(5*s, bodyTop + 1*s, 3*s, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = G;
+                ctx.beginPath(); ctx.arc(6*s, bodyTop + 0.5*s, 1.5*s, 0, Math.PI*2); ctx.fill();  // rivet
+            } else if (dir === 'down') {
+                for (let side = -1; side <= 1; side += 2) {
+                    const sx = side * 8.5*s;
+                    ctx.fillStyle = M;
+                    ctx.beginPath(); ctx.arc(sx, bodyTop + 2*s, 5.5*s, 0, Math.PI*2); ctx.fill();
+                    ctx.fillStyle = ML;
+                    ctx.beginPath(); ctx.arc(sx, bodyTop + 1*s, 3.5*s, 0, Math.PI*2); ctx.fill();
+                    // gold trim rim
+                    ctx.strokeStyle = G; ctx.lineWidth = 1*s;
+                    ctx.beginPath(); ctx.arc(sx, bodyTop + 2*s, 5*s, Math.PI*0.4, Math.PI*1.6); ctx.stroke();
+                    ctx.lineWidth = 1;
+                    ctx.fillStyle = G;
+                    ctx.beginPath(); ctx.arc(sx + side*1*s, bodyTop + 0.5*s, 1.5*s, 0, Math.PI*2); ctx.fill();
+                }
+            } else {
+                // back view: smaller pauldrons
+                for (let side = -1; side <= 1; side += 2) {
+                    ctx.fillStyle = MD;
+                    ctx.beginPath(); ctx.arc(side * 8*s, bodyTop + 2*s, 4.5*s, 0, Math.PI*2); ctx.fill();
+                }
+            }
+
+            // ================================================================
+            //  ARMS  — vambraces + gauntlets + sword
+            // ================================================================
+            const armW = 2.8*s, armLen = 9*s;
+            if (isSide) {
+                const ax0 = 2*s;
+                const ay0 = bodyTop + 3*s;
+                const sw = frame === 0 ? st0*0.3*sg : (frame === 2 ? st1*0.3*sg : 0);
+                // vambrace (forearm armor)
+                ctx.fillStyle = M;
+                ctx.fillRect(ax0 + sw - 1.5*s, ay0, armW, armLen);
+                ctx.fillStyle = ML;
+                ctx.fillRect(ax0 + sw - 0.5*s, ay0, armW*0.3, armLen);
+                // gauntlet
+                ctx.fillStyle = MD;
+                ctx.fillRect(ax0 + sw - 2*s, ay0 + armLen - 2*s, armW + 1.5*s, 3*s);
+                // === SWORD (horizontal, pointing forward) ===
+                const swX = ax0 + sw + armW;
+                const swY = ay0 + armLen*0.45;
+                // crossguard
+                ctx.fillStyle = G;
+                ctx.fillRect(swX - 1*s, swY - 3*s, 3*s, 6*s);
+                // grip
+                ctx.fillStyle = B;
+                ctx.fillRect(swX + 2*s, swY - 2*s, 4*s, 4*s);
+                // blade (long, pointed)
+                ctx.fillStyle = '#f0f0f8';
+                ctx.fillRect(swX + 6*s, swY - 1.5*s, 10*s, 3*s);
+                ctx.fillStyle = ML;
+                ctx.fillRect(swX + 6*s, swY - 1*s, 10*s, 1.2*s);  // blade highlight
+                // blade tip
+                ctx.beginPath();
+                ctx.moveTo(swX + 16*s, swY);
+                ctx.lineTo(swX + 13*s, swY - 2.5*s);
+                ctx.lineTo(swX + 13*s, swY + 2.5*s);
+                ctx.closePath(); ctx.fill();
+                // pommel
+                ctx.fillStyle = G;
+                ctx.beginPath(); ctx.arc(swX + 2*s, swY, 2*s, 0, Math.PI*2); ctx.fill();
+            } else if (dir === 'down') {
+                // Left arm
+                ctx.fillStyle = M;
+                ctx.fillRect(-12*s + st1*0.2, bodyTop + 3*s, armW, armLen);
+                ctx.fillStyle = ML;
+                ctx.fillRect(-11.5*s + st1*0.2, bodyTop + 3*s, armW*0.3, armLen);
+                ctx.fillStyle = MD;
+                ctx.fillRect(-12.5*s + st1*0.2, bodyTop + 3*s + armLen - 2*s, armW + 1.5*s, 3*s);
+                // Right arm + sword
+                const rx = 9*s + st0*0.2, ry = bodyTop + 3*s;
+                ctx.fillStyle = M;
+                ctx.fillRect(rx, ry, armW, armLen);
+                ctx.fillStyle = ML;
+                ctx.fillRect(rx + armW*0.2, ry, armW*0.3, armLen);
+                ctx.fillStyle = MD;
+                ctx.fillRect(rx - 0.5*s, ry + armLen - 2*s, armW + 1.5*s, 3*s);
+                // Sword
+                ctx.save();
+                ctx.translate(rx + armW/2, ry + armLen);
+                ctx.rotate(0.25);
+                // crossguard
+                ctx.fillStyle = G;
+                ctx.fillRect(-4*s, -1.5*s, 8*s, 3*s);
+                // grip
+                ctx.fillStyle = B;
+                ctx.fillRect(-1*s, -0.5*s, 2.5*s, 5*s);
+                // pommel
+                ctx.fillStyle = G;
+                ctx.beginPath(); ctx.arc(0, 5*s, 2*s, 0, Math.PI*2); ctx.fill();
+                // blade
+                ctx.fillStyle = '#f0f0f8';
+                ctx.fillRect(-1.2*s, -14*s, 2.4*s, 13*s);
+                ctx.fillStyle = ML;
+                ctx.fillRect(-0.5*s, -13*s, 0.8*s, 11*s);
+                ctx.restore();
+            } else {
+                // back: arms at sides, sword scabbard on back
+                ctx.fillStyle = MD;
+                ctx.fillRect(-12*s, bodyTop + 3*s, armW, armLen*0.8);
+                ctx.fillRect(9.5*s, bodyTop + 3*s, armW, armLen*0.8);
+                // Scabbard diagonal across back
+                ctx.fillStyle = G;
+                ctx.save();
+                ctx.translate(2*s, headY + headR);
+                ctx.rotate(-0.2);
+                ctx.fillRect(-2*s, 0, 4*s, 14*s);
+                ctx.fillStyle = B;
+                ctx.fillRect(0, 4*s, 2*s, 4*s);  // grip end
+                ctx.restore();
+            }
+
+            // ================================================================
+            //  HELMET — great helm style with十字 visor + breathing holes + crest
+            // ================================================================
+            if (isSide) {
+                // Helmet dome
+                ctx.fillStyle = M;
+                ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI*2); ctx.fill();
+                ctx.fillStyle = ML;
+                ctx.beginPath(); ctx.arc(0, headY - headR*0.2, headR*0.7, 0, Math.PI*2); ctx.fill();
+                // Visor — prominent dark bar
+                const vx = sg * headR*0.15, vy = headY - 0.5*s;
+                ctx.fillStyle = '#222';
+                ctx.fillRect(vx, vy, headR*0.55, 3*s);
+                // Breathing holes (tiny dots on lower front)
+                ctx.fillStyle = '#111';
+                for (let h = 0; h < 3; h++) {
+                    ctx.beginPath();
+                    ctx.arc(sg * headR*0.5, vy + 4*s + h*1.8*s, 0.7*s, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                // Neck guard
+                ctx.fillStyle = MD;
+                ctx.fillRect(-3*s, headY + headR*0.7, 6*s, 3*s);
+                // Crest/plume
+                ctx.fillStyle = R;
+                ctx.beginPath();
+                ctx.moveTo(0, headY - headR*0.95);
+                ctx.quadraticCurveTo(-sg*headR*1.2, headY - headR*1.6, -sg*headR*0.5, headY - headR*1.3);
+                ctx.quadraticCurveTo(sg*headR*0.1, headY - headR*1.0, 0, headY - headR*0.8);
+                ctx.fill();
+            } else if (dir === 'up') {
+                // Full helmet back
+                ctx.fillStyle = MD;
+                ctx.beginPath(); ctx.arc(0, headY, headR*1.08, 0, Math.PI*2); ctx.fill();
+                // Neck guard (wider at back)
+                ctx.fillStyle = MD;
+                ctx.fillRect(-4.5*s, headY + headR*0.7, 9*s, 3*s);
+                // Plume
+                ctx.fillStyle = R;
+                ctx.beginPath();
+                ctx.moveTo(0, headY - headR*0.9);
+                ctx.quadraticCurveTo(4*s, headY - headR*1.5, 6*s, headY - headR*0.9);
+                ctx.quadraticCurveTo(2*s, headY - headR*0.7, 0, headY - headR*0.5);
+                ctx.fill();
+            } else {
+                // FRONT — great helm
+                // Dome
+                const helmGrad = ctx.createRadialGradient(0, headY - headR*0.3, headR*0.1, 0, headY, headR*1.05);
+                helmGrad.addColorStop(0, ML); helmGrad.addColorStop(0.6, M); helmGrad.addColorStop(1, MD);
+                ctx.fillStyle = helmGrad;
+                ctx.beginPath(); ctx.arc(0, headY, headR, 0, Math.PI*2); ctx.fill();
+                // 十字 visor (iconic crusader-style cross slit)
+                ctx.fillStyle = '#1a1a1a';
+                const visW = headR * 0.55, visH = headR * 0.15;
+                // horizontal slit
+                ctx.fillRect(-visW, headY - 0.5*s, visW*2, 2.8*s);
+                // vertical slit (T-shape)
+                ctx.fillRect(-1.2*s, headY - 1*s, 2.4*s, 5*s);
+                // Breathing holes (3 each side of vertical slit)
+                ctx.fillStyle = '#111';
+                for (let side = -1; side <= 1; side += 2) {
+                    for (let h = 0; h < 3; h++) {
+                        ctx.beginPath();
+                        ctx.arc(side * headR*0.35, headY + 3*s + h*1.8*s, 0.6*s, 0, Math.PI*2);
+                        ctx.fill();
+                    }
+                }
+                // Neck guard
+                ctx.fillStyle = MD;
+                ctx.fillRect(-headR*0.8, headY + headR*0.75, headR*1.6, 2.5*s);
+                // Gold trim on neck
+                ctx.fillStyle = G;
+                ctx.fillRect(-headR*0.6, headY + headR*0.7, headR*1.2, 0.8*s);
+                // Crest / plume
+                ctx.fillStyle = R;
+                ctx.beginPath();
+                ctx.moveTo(0, headY - headR*1.05);
+                ctx.quadraticCurveTo(5*s, headY - headR*1.6, 7*s, headY - headR*0.7);
+                ctx.quadraticCurveTo(3*s, headY - headR*0.6, 0, headY - headR*0.4);
+                ctx.fill();
+                // small secondary feather
+                ctx.fillStyle = RD;
+                ctx.beginPath();
+                ctx.moveTo(1*s, headY - headR*0.95);
+                ctx.quadraticCurveTo(3*s, headY - headR*1.2, 4*s, headY - headR*0.6);
+                ctx.quadraticCurveTo(1.5*s, headY - headR*0.5, 0, headY - headR*0.5);
+                ctx.fill();
+            }
+
+            ctx.restore();
         }
 
         _drawHUD(ctx, s, offX, offY, rows, cs) {
