@@ -158,4 +158,3 @@ cython_debug/
 .checkpoints
 /checkpoints
 .checkpoints/MetaBCIWebGame/data_self/
-MetaBCIWebGame/data_self_test/
