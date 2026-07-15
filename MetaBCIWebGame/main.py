@@ -1,8 +1,6 @@
 # main.py
 print("MAIN FILE =", __file__, flush=True)
-import sys
-import signal
-import threading
+import sys, os, signal, threading
 from websocket_server import get_websocket_server
 
 _stop_event = threading.Event()
@@ -15,9 +13,16 @@ def signal_handler(sig, frame):
 def main():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
+
+    # 静态文件已移入 MetaBCI 框架: metabci/webgame/static/
+    from metabci.webgame import STATIC_DIR as FRONTEND_DIR
+    print(f"前端目录: {FRONTEND_DIR}")
+
     ws = get_websocket_server()
     ws.start()
     print("WebSocket 服务器已启动，等待前端连接...")
+    print(f"浏览器打开: http://localhost:8765/static/index.html  (需另启 HTTP 服务)")
+    print(f"  cd {FRONTEND_DIR} && python -m http.server 8000")
     try:
         _stop_event.wait()
     except KeyboardInterrupt:

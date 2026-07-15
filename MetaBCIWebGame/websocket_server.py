@@ -35,11 +35,14 @@ from metabci.brainda.datasets import SelfSSVEP
 # brainflow: 在线处理引擎与采集 Worker
 from metabci.brainflow.online import ContinuousStreamingEngine
 from metabci.brainflow.ssvep_worker import SSVEPWorker
+from metabci.brainflow.logger import get_logger    # brainflow 原有: 日志记录器
 
+_base_logger = get_logger("MetaBCIWebGame")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def force_log(msg):
+    _base_logger.info(msg)
     sys.stderr.write(f"[{time.strftime('%H:%M:%S')}] {msg}\n")
     sys.stderr.flush()
 

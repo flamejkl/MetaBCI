@@ -1,11 +1,12 @@
 # data_acquisition.py
-# 通过 brainflow ProcessWorker 模式实现 EEG 数据采集
+# 通过 brainflow ProcessWorker + RingBuffer 实现 EEG 数据采集
 # 在线解码场景可使用 metabci.brainflow.SSVEPWorker 替代本类的实时处理逻辑
 import time
 import numpy as np
 import threading
 from neuracle_api import DataServerThread
-from metabci.brainflow.workers import ProcessWorker  # MetaBCI brainflow 基类
+from metabci.brainflow.workers import ProcessWorker   # brainflow 原有: 进程工作基类
+from metabci.brainflow.amplifiers import RingBuffer    # brainflow 原有: 在线环形缓冲
 
 
 class DataAcquisition:
