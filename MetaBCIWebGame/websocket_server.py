@@ -26,16 +26,9 @@ from config import (
 from data_acquisition import DataAcquisition
 
 # ---- MetaBCI 框架集成 ----
-# brainda: 分类算法与数据集
-from metabci.brainda.algorithms.decomposition import (
-    GrowingWindowDecoder, AdvancedVoter
-)
+from metabci.brainda.algorithms.decomposition import GrowingWindowDecoder
 from metabci.brainda.datasets import SelfSSVEP
-
-# brainflow: 在线处理引擎与采集 Worker
-from metabci.brainflow.online import ContinuousStreamingEngine
-from metabci.brainflow.ssvep_worker import SSVEPWorker
-from metabci.brainflow.logger import get_logger    # brainflow 原有: 日志记录器
+from metabci.brainflow.logger import get_logger
 
 _base_logger = get_logger("MetaBCIWebGame")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -191,11 +184,23 @@ class ContinuousStreamingEngine:
 
         if self.state == self.State.REALTIME:
             command = ["up", "down", "left", "right"][decision]
+            # 从decoder获取逐类分数（如果可用）
+            scores = getattr(self.decoder, '_last_scores', None)
+            if scores is not None:
+                all_conf = [float(s) for s in scores]
+            else:
+                # 基于decision/conf估算分布
+                all_conf = [0.0] * 4
+                all_conf[decision] = conf
+                rem = (1.0 - conf) / 3.0
+                for i in range(4):
+                    if i != decision:
+                        all_conf[i] = max(0.0, rem)
             msg = {
                 "type": "realtime_command",
                 "command": command,
                 "confidence": conf,
-                "all_confidences": [0.0] * 4
+                "all_confidences": all_conf
             }
             if self.emit_callback:
                 await self.emit_callback(msg)
@@ -206,6 +211,12 @@ class ContinuousStreamingEngine:
             if expected is not None:
                 decoded_dir = ["up", "down", "left", "right"][decision]
                 match = (decoded_dir == expected)
+                scores = getattr(self.decoder, '_last_scores', None)
+                if scores is not None:
+                    all_conf = [float(s) for s in scores]
+                else:
+                    all_conf = [0.0] * 4
+                    all_conf[decision] = conf
                 msg = {
                     "type": msg_type,
                     "decoded": decoded_dir,
@@ -213,7 +224,7 @@ class ContinuousStreamingEngine:
                     "match": match,
                     "timeout": False,
                     "confidence": conf,
-                    "all_confidences": [0.0] * 4
+                    "all_confidences": all_conf
                 }
                 # 添加文件名（如果有）
                 if 'filename' in self.current_extra:
@@ -328,7 +339,12 @@ class WebSocketServer:
     def _init_gw_decoder(self):
         if self.gw_decoder is None:
             try:
-                self.gw_decoder = GrowingWindowDecoder()
+                self.gw_decoder = GrowingWindowDecoder(model_paths={
+                    125: os.path.join(BASE_DIR, "model_125.pkl"),
+                    250: os.path.join(BASE_DIR, "model_250.pkl"),
+                    375: os.path.join(BASE_DIR, "model_375.pkl"),
+                    500: os.path.join(BASE_DIR, "self_ssvep_model.pkl"),
+                })
                 log("✅ Growing Window 解码器已初始化")
             except Exception as e:
                 log(f"❌ Growing Window 解码器初始化失败: {e}")

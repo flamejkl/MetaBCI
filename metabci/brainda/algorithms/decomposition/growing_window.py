@@ -99,6 +99,7 @@ class GrowingWindowDecoder:
 
         # ---- cache ----
         self._cached_window = None
+        self._last_scores = None    # exposed for confidence visualization
         self._cached_model_len = None
 
         # ---- online EMA normalisation ----
@@ -162,6 +163,7 @@ class GrowingWindowDecoder:
         window = self._preprocess(window)
 
         scores = self.models[model_len].transform(window[np.newaxis, ...])[0]
+        self._last_scores = scores
         top2 = np.partition(scores, -2)[-2:]
         margin = top2.max() - top2.min()
         max_score = np.max(scores)
