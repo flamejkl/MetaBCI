@@ -1,0 +1,6 @@
+# pseudo_online_results.json 说明
+# 该文件为早期版本解码器（固定2s窗口）在160试次上的评估结果，
+# 准确率94.38%，所有决策时间均为2.0s。
+# 当前版本GrowingWindowDecoder的评估结果（98.12%, 688ms, 93.1%）
+# 来自 eval_growing_window.py 脚本运行输出。
+# 此文件保留作为历史参考，不代表最终系统性能。

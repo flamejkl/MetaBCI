@@ -21,7 +21,7 @@ from typing import Optional, Callable, Awaitable, Tuple, Any
 from config import (
     WS_HOST, WS_PORT, MODEL_PATH, NEURACLE_IP, NEURACLE_PORT,
     OFFLINE_DATA_ROOT, WINDOW_LEN_SAMPLES, ONLINE_SAMPLE_RATE,
-    DEMO_DATA_ROOT
+    DEMO_DATA_ROOT, GW_MODEL_PATHS
 )
 from data_acquisition import DataAcquisition
 
@@ -184,12 +184,14 @@ class ContinuousStreamingEngine:
 
         if self.state == self.State.REALTIME:
             command = ["up", "down", "left", "right"][decision]
-            # 从decoder获取逐类分数（如果可用）
+            # 从decoder获取逐类分数，softmax归一化到0-1
             scores = getattr(self.decoder, '_last_scores', None)
             if scores is not None:
-                all_conf = [float(s) for s in scores]
+                s = np.array(scores)
+                s -= s.max()  # 数值稳定
+                exp_s = np.exp(s)
+                all_conf = (exp_s / exp_s.sum()).tolist()
             else:
-                # 基于decision/conf估算分布
                 all_conf = [0.0] * 4
                 all_conf[decision] = conf
                 rem = (1.0 - conf) / 3.0
@@ -213,7 +215,10 @@ class ContinuousStreamingEngine:
                 match = (decoded_dir == expected)
                 scores = getattr(self.decoder, '_last_scores', None)
                 if scores is not None:
-                    all_conf = [float(s) for s in scores]
+                    s = np.array(scores)
+                    s -= s.max()
+                    exp_s = np.exp(s)
+                    all_conf = (exp_s / exp_s.sum()).tolist()
                 else:
                     all_conf = [0.0] * 4
                     all_conf[decision] = conf
@@ -339,12 +344,7 @@ class WebSocketServer:
     def _init_gw_decoder(self):
         if self.gw_decoder is None:
             try:
-                self.gw_decoder = GrowingWindowDecoder(model_paths={
-                    125: os.path.join(BASE_DIR, "model_125.pkl"),
-                    250: os.path.join(BASE_DIR, "model_250.pkl"),
-                    375: os.path.join(BASE_DIR, "model_375.pkl"),
-                    500: os.path.join(BASE_DIR, "self_ssvep_model.pkl"),
-                })
+                self.gw_decoder = GrowingWindowDecoder(model_paths=GW_MODEL_PATHS)
                 log("✅ Growing Window 解码器已初始化")
             except Exception as e:
                 log(f"❌ Growing Window 解码器初始化失败: {e}")
