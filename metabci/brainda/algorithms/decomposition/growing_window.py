@@ -149,10 +149,12 @@ class GrowingWindowDecoder:
         L = self._total
         if L < self.min_len:
             return None, 0.0, L / self.sample_rate
-        if L % self.step != 0:
+        # Only evaluate at model-length boundaries (125, 250, 375, 500),
+        # skipping redundant intermediate checks that re-run the same model
+        if L not in self.model_lengths and L < self.max_len:
             return None, 0.0, L / self.sample_rate
 
-        model_len = self._best_model_len(L)
+        model_len = L if L in self.model_lengths else self.max_len
         if model_len is None:
             return None, 0.0, L / self.sample_rate
 
