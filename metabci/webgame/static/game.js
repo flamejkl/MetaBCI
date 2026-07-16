@@ -6,6 +6,20 @@
     const DEMO_TIMEOUT_MS = 3000;
     const DEMO_MAX_RETRIES = 10;
     const WS_RECONNECT_DELAY = 3000;
+    const N_CLASSES = 4;
+
+    // Wolpaw ITR: B = log2(N)+P*log2(P)+(1-P)*log2((1-P)/(N-1)), ITR = B * 60/T
+    function computeOnlineITR(steps) {
+        const valid = steps.filter(s => s.match !== undefined && s.decision_time > 0);
+        if (valid.length === 0) return null;
+        const correct = valid.filter(s => s.match).length;
+        const P = correct / valid.length;
+        const avgT = valid.reduce((a, s) => a + s.decision_time, 0) / valid.length;
+        if (P <= 1/N_CLASSES || avgT <= 0) return null;
+        const B = Math.log2(N_CLASSES) + P*Math.log2(P) + (1-P)*Math.log2((1-P)/(N_CLASSES-1));
+        const ITR = B * (60 / avgT);
+        return { accuracy: P, avgTime: avgT, ITR: ITR, total: valid.length, correct };
+    }
 
     const stimPhases = {
         up: 0,      // 0 * π
@@ -1710,14 +1724,16 @@
             if (s.match) correct++;
         }
         const accuracy = totalAttempts > 0 ? (correct / totalAttempts * 100).toFixed(2) : 0;
+        const itr_demo = computeOnlineITR(demoActualSteps);
+        const itrStr_demo = itr_demo ? ` | ITR: ${itr_demo.ITR.toFixed(1)} bits/min (${(itr_demo.avgTime*1000).toFixed(0)}ms/trial)` : '';
         if (demoSummaryDiv) {
-            demoSummaryDiv.innerHTML = `总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%`;
+            demoSummaryDiv.innerHTML = `总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%${itrStr_demo}`;
         }
         if (demoProgressDiv) {
             demoProgressDiv.innerHTML = `原始路径: ${demoPath.length} 步，实际尝试: ${totalAttempts} 次`;
         }
         if (demoLogDiv) {
-            demoLogDiv.innerHTML += `\n🏁 演示结束。总尝试 ${totalAttempts}，正确 ${correct}，准确率 ${accuracy}%`;
+            demoLogDiv.innerHTML += `\n🏁 演示结束。总尝试 ${totalAttempts}，正确 ${correct}，准确率 ${accuracy}%${itrStr_demo}`;
         }
     }
 
@@ -1757,7 +1773,8 @@
                         match: false,
                         filename: '超时',
                         confidence: 0,
-                        all_confidences: [0,0,0,0]
+                        all_confidences: [0,0,0,0],
+                        decision_time: 2.0
                     });
                 }
             }, DEMO_TIMEOUT_MS);
@@ -1793,6 +1810,7 @@
             match: match,
             filename: filename,
             confidence: conf,
+            decision_time: result.decision_time || 2.0,
             step: stepNum,
             retry: demoRetryCount
         });
@@ -1963,11 +1981,13 @@
         let correct = 0;
         for (let s of evalResults) if (s.match) correct++;
         const accuracy = totalAttempts > 0 ? (correct / totalAttempts * 100).toFixed(2) : 0;
+        const itr_eval = computeOnlineITR(evalResults);
+        const itrStr_eval = itr_eval ? ` | ITR: ${itr_eval.ITR.toFixed(1)} bits/min (${(itr_eval.avgTime*1000).toFixed(0)}ms/trial)` : '';
         const summaryDiv = document.getElementById('demo-summary');
         if (summaryDiv) {
-            summaryDiv.innerHTML = `在线评测结果 | 总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%`;
+            summaryDiv.innerHTML = `在线评测结果 | 总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%${itrStr_eval}`;
         }
-        console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%`);
+        console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%${itrStr_eval}`);
     }
 
     function startNextEvalTrial() {
@@ -2034,10 +2054,11 @@
                                 match: false,
                                 filename: '超时',
                                 confidence: 0,
-                                all_confidences: [0,0,0,0]
+                                all_confidences: [0,0,0,0],
+                                decision_time: 2.0
                             });
                         } else {
-                            handleEvalResult({ match: false, decoded: 'timeout', confidence: 0 });
+                            handleEvalResult({ match: false, decoded: 'timeout', confidence: 0, decision_time: 2.0 });
                         }
                     }
                 }, 1500);
@@ -2080,6 +2101,7 @@
             decoded: decoded,
             match: match,
             confidence: data.confidence || 0,
+            decision_time: data.decision_time || 2.0,
             step: evalTrialIndex + 1,
             retry: evalRetryCount
         });

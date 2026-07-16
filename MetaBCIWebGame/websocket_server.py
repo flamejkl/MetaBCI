@@ -229,7 +229,8 @@ class ContinuousStreamingEngine:
                     "match": match,
                     "timeout": False,
                     "confidence": conf,
-                    "all_confidences": all_conf
+                    "all_confidences": all_conf,
+                    "decision_time": current_time
                 }
                 # 添加文件名（如果有）
                 if 'filename' in self.current_extra:
