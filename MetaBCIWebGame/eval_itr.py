@@ -122,6 +122,7 @@ def evaluate_growing_window(X, y):
 
     for data, label in zip(X, y):
         decoder.reset()
+        decoder.reset_normaliser()  # 每试次独立，避免EMA跨试次污染
         decision = None
         for i in range(data.shape[1]):
             d, conf, t = decoder.feed(data[:, i])
@@ -149,6 +150,7 @@ def evaluate_fixed_window(X, y, window_len=2.0):
     n_samples = int(window_len * SAMPLE_RATE)
     for data, label in zip(X, y):
         decoder.reset()
+        decoder.reset_normaliser()
         decision = None
         # 只取前 N 个样本
         window_data = data[:, :n_samples]
