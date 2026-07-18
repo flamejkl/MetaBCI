@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 # License: MIT License
 """
-Online SSVEP streaming engine for continuous brain-control.
+Online streaming engine for continuous brain-control decoding.
 
 Provides ContinuousStreamingEngine — an asyncio-based engine that feeds
 real-time EEG samples through a decoder (e.g. GrowingWindowDecoder) and
@@ -17,6 +17,7 @@ Reference
 
     engine = ContinuousStreamingEngine(model, decoder)
     engine.emit_callback = my_async_send
+    engine.data_source_callback = my_data_source
     await engine.start()
 """
 import asyncio
@@ -31,11 +32,12 @@ class ContinuousStreamingEngine:
     Parameters
     ----------
     model : object
-        A trained classifier with a ``transform`` method.
+        A trained classifier (unused directly; decoder handles inference).
     decoder : object
-        A decoder with ``feed(sample)``, ``reset()``, and optionally ``slide()``.
+        A decoder with ``feed(sample) → (decision, conf, t)``, ``reset()``,
+        and optionally ``slide()``.
     occipital_indices : list of int
-        Indices of occipital channels in the incoming 14-ch data.
+        Indices of occipital channels in 14-ch data.
     sample_rate : int
         EEG sampling rate in Hz.
     """
@@ -57,25 +59,23 @@ class ContinuousStreamingEngine:
         self.state = self.State.IDLE
         self._running = False
         self._loop_task: Optional[asyncio.Task] = None
-        self._stop_event = asyncio.Event()
 
-        # Data source callback → (ndarray | None, bool, dict)
         self.data_source_callback: Optional[
             Callable[[], Tuple[Optional[np.ndarray], bool, dict]]
         ] = None
         self.emit_callback: Optional[Callable[[dict], Awaitable[None]]] = None
 
-        self.context = {"expected_dir": None, "msg_type": None, "trial_started": False}
-        self.current_extra = {}
+        self.context = {"expected_dir": None, "msg_type": None}
+        self.current_extra: dict = {}
         self.frame_count = 0
         self.decision_count = 0
         self.last_decision_time = 0.0
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    #  Main loop
+    # ------------------------------------------------------------------ #
     async def _continuous_loop(self):
         self._running = True
-        self._stop_event.clear()
-
         while self._running:
             loop_start = time.perf_counter()
             if self.data_source_callback:
@@ -96,25 +96,31 @@ class ContinuousStreamingEngine:
             elapsed = time.perf_counter() - loop_start
             await asyncio.sleep(max(0, 0.004 - elapsed))
 
+    # ------------------------------------------------------------------ #
+    #  Decision handling
+    # ------------------------------------------------------------------ #
     async def _on_decision(self, decision, conf, current_time):
         self.decision_count += 1
         self.last_decision_time = current_time
 
         if self.state == self.State.REALTIME:
             command = ["up", "down", "left", "right"][decision]
+            all_conf = self._build_confidences(decision, conf)
             if self.emit_callback:
                 await self.emit_callback({
                     "type": "realtime_command",
                     "command": command,
                     "confidence": conf,
-                    "all_confidences": [0.0] * 4,
+                    "all_confidences": all_conf,
                 })
+
         elif self.state in (self.State.DEMO, self.State.EVAL):
             expected = self.context.get("expected_dir")
             msg_type = self.context.get("msg_type", "eval_result")
             if expected is not None:
                 decoded_dir = ["up", "down", "left", "right"][decision]
                 match = (decoded_dir == expected)
+                all_conf = self._build_confidences(decision, conf)
                 msg = {
                     "type": msg_type,
                     "decoded": decoded_dir,
@@ -122,7 +128,8 @@ class ContinuousStreamingEngine:
                     "match": match,
                     "timeout": False,
                     "confidence": conf,
-                    "all_confidences": [0.0] * 4,
+                    "all_confidences": all_conf,
+                    "decision_time": current_time,
                 }
                 if 'filename' in self.current_extra:
                     msg['filename'] = self.current_extra['filename']
@@ -131,13 +138,15 @@ class ContinuousStreamingEngine:
                 self.context["expected_dir"] = None
                 self.context["msg_type"] = None
 
+        # Reset or slide decoder after each decision
         if self.state != self.State.REALTIME:
             self.decoder.reset()
-        else:
-            if hasattr(self.decoder, 'slide'):
-                self.decoder.slide()
+        elif hasattr(self.decoder, 'slide'):
+            self.decoder.slide()
 
-    # ------------------------------------------------------------------
+    # ------------------------------------------------------------------ #
+    #  Lifecycle
+    # ------------------------------------------------------------------ #
     async def start(self):
         if self._running:
             return
@@ -162,3 +171,24 @@ class ContinuousStreamingEngine:
         self.state = state
         self.context["expected_dir"] = expected_dir
         self.context["msg_type"] = msg_type
+
+    # ------------------------------------------------------------------ #
+    #  Helpers
+    # ------------------------------------------------------------------ #
+    def _build_confidences(self, decision, conf):
+        """Return softmax-normalised 4-class confidence list."""
+        scores = getattr(self.decoder, '_last_scores', None)
+        if scores is not None:
+            s = np.array(scores, dtype=np.float64)
+            s -= s.max()
+            exp_s = np.exp(s)
+            return (exp_s / exp_s.sum()).tolist()
+
+        # Fallback: distribute remaining mass evenly
+        result = [0.0] * 4
+        result[decision] = conf
+        rem = max(0.0, (1.0 - conf) / 3.0)
+        for i in range(4):
+            if i != decision:
+                result[i] = rem
+        return result
