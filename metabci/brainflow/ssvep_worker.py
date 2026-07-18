@@ -3,12 +3,9 @@
 """
 SSVEP online decoding worker based on brainflow ProcessWorker.
 
-Provides SSVEPWorker — a brainflow ProcessWorker subclass that receives
-EEG data through the multiprocessing queue and runs GrowingWindowDecoder
-for real-time SSVEP classification.
-
-Also provides DataAcquisitionWrapper — a thin wrapper that demonstrates
-brainflow integration for EEG data collection with Neuracle hardware.
+Provides SSVEPWorker — a brainflow ProcessWorker subclass that runs GrowingWindowDecoder
+in a subprocess for real-time SSVEP classification, keeping the main process
+responsive for WebSocket I/O and stimulus timing.
 
 Reference
 ---------
@@ -17,14 +14,17 @@ Reference
     from metabci.brainflow.ssvep_worker import SSVEPWorker
 
     worker = SSVEPWorker(
-        model_paths={...},
+        model_paths={125: "model_125.pkl", ...},
         occipital_indices=[2,3,4,5,6,7,8,9],
     )
-    worker.start()
-    worker.put(eeg_trial)        # from main process
-    # worker runs consume() in subprocess → emits decisions
+    worker.pre()      # init decoder
+    worker.start()     # launch subprocess
+    worker.put(trial)  # feed (n_samples, n_channels) trial
+    # subprocess runs consume(), posts result to worker.result_queue
 """
 import time
+import queue
+import threading
 import numpy as np
 from typing import Optional, Dict, Tuple
 
@@ -35,18 +35,21 @@ from metabci.brainda.algorithms.decomposition.growing_window import (
 
 
 class SSVEPWorker(ProcessWorker):
-    """brainflow ProcessWorker for online SSVEP decoding.
+    """brainflow ProcessWorker for real-time SSVEP decoding.
+
+    Runs GrowingWindowDecoder in a subprocess so that blocking model inference
+    does not stall WebSocket I/O or stimulus timing in the main process.
 
     Parameters
     ----------
     model_paths : dict
-        {window_length_samples: model_path} for GrowingWindowDecoder.
+        {window_samples: .pkl path}.
     occipital_indices : list of int
         Channel indices for occipital electrodes.
     sample_rate : int
         EEG sampling rate in Hz.
-    decision_callback : callable or None
-        Called as ``callback(decision_idx, confidence)`` when a decision is made.
+    timeout : float
+        queue polling timeout in seconds.
     """
 
     def __init__(
@@ -54,7 +57,6 @@ class SSVEPWorker(ProcessWorker):
         model_paths: Optional[Dict[int, str]] = None,
         occipital_indices: Optional[list] = None,
         sample_rate: int = 250,
-        decision_callback=None,
         timeout: float = 1e-3,
         name: Optional[str] = None,
     ):
@@ -62,52 +64,83 @@ class SSVEPWorker(ProcessWorker):
         self.model_paths = model_paths
         self.occipital_indices = occipital_indices or [2, 3, 4, 5, 6, 7, 8, 9]
         self.sample_rate = sample_rate
-        self.decision_callback = decision_callback
-        self.decoder: Optional[GrowingWindowDecoder] = None
-        self._n_samples = 0
+        self._decoder: Optional[GrowingWindowDecoder] = None
 
-    # ---- ProcessWorker interface ----
+        # Thread-safe result queue so main process can poll decisions
+        self.result_queue: queue.Queue = queue.Queue()
+
+    # ==================================================================
+    #  ProcessWorker interface
+    # ==================================================================
+
     def pre(self):
-        """Offline preparation — instantiate the decoder."""
-        self.decoder = GrowingWindowDecoder(
+        """Initialise decoder in subprocess before real-time loop."""
+        self._decoder = GrowingWindowDecoder(
             model_paths=self.model_paths,
-            sample_rate=self.sample_rate,
             occipital_indices=self.occipital_indices,
+            sample_rate=self.sample_rate,
         )
-        self._n_samples = 0
 
     def consume(self, data: np.ndarray):
-        """Online processing — feed EEG samples through the decoder.
+        """Feed one trial worth of EEG samples.
 
         Parameters
         ----------
-        data : ndarray, shape (n_samples, n_channels + 1)
-            Single trial of online data.  The last channel is the trigger
-            channel (ignored for decoding).
+        data : ndarray, shape (n_samples, n_channels)
+            A full trial (typically 500 samples × 8 channels).
         """
-        if self.decoder is None:
+        if self._decoder is None:
             return
 
-        # Discard trigger channel if present
-        eeg = data[:, :14] if data.shape[1] >= 14 else data
-        # Select occipital channels
-        eeg = eeg[:, self.occipital_indices]
-
-        for sample in eeg:
-            decision, confidence, t = self.decoder.feed(sample)
+        self._decoder.reset()
+        for sample in data:
+            decision, confidence, t = self._decoder.feed(sample)
             if decision is not None:
-                if self.decision_callback:
-                    self.decision_callback(decision, confidence)
-                self.decoder.reset()
+                self.result_queue.put({
+                    "decision": decision,
+                    "confidence": confidence,
+                    "decision_time": t,
+                    "scores": getattr(self._decoder, '_last_scores', None),
+                })
                 break
+        else:
+            # Trial exhausted without decision (should not happen)
+            # Force with last state
+            self.result_queue.put({
+                "decision": -1,
+                "confidence": 0.0,
+                "decision_time": 2.0,
+                "scores": None,
+            })
 
     def post(self):
-        """Cleanup after stopping."""
-        if self.decoder:
-            self.decoder.reset_normaliser()
-        self._n_samples = 0
+        """Cleanup."""
+        if self._decoder:
+            self._decoder.reset_normaliser()
 
     def calibrate(self, samples: np.ndarray):
-        """Seed the decoder's online normaliser with background EEG."""
-        if self.decoder:
-            self.decoder.calibrate(samples)
+        """Seed online normaliser with resting EEG."""
+        if self._decoder:
+            self._decoder.calibrate(samples)
+
+    # ==================================================================
+    #  Convenience (single-process fallback)
+    # ==================================================================
+
+    def run_trial(self, data: np.ndarray) -> dict:
+        """Decode one trial synchronously (no subprocess needed).
+
+        Returns dict with keys: decision, confidence, decision_time, scores.
+        """
+        if self._decoder is None:
+            self.pre()
+        self._decoder.reset()
+        for sample in data:
+            d, conf, t = self._decoder.feed(sample)
+            if d is not None:
+                return {
+                    "decision": d, "confidence": conf,
+                    "decision_time": t,
+                    "scores": getattr(self._decoder, '_last_scores', None),
+                }
+        return {"decision": -1, "confidence": 0.0, "decision_time": 2.0, "scores": None}

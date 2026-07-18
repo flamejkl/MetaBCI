@@ -21,18 +21,23 @@ Reference
     await engine.start()
 """
 import asyncio
+import concurrent.futures
+import queue
+import threading
 import time
 import numpy as np
 from typing import Optional, Callable, Awaitable, Tuple
 
 
 class ContinuousStreamingEngine:
-    """Async streaming engine for continuous EEG decoding.
+    """Async streaming engine with threaded decoder execution.
+
+    Decoder inference runs in a daemon thread so the asyncio event loop
+    stays responsive for WebSocket I/O and stimulus timing.
 
     Parameters
     ----------
-    model : object
-        A trained classifier (unused directly; decoder handles inference).
+    model : object (unused directly; decoder handles inference).
     decoder : object
         A decoder with ``feed(sample) → (decision, conf, t)``, ``reset()``,
         and optionally ``slide()``.
@@ -71,14 +76,18 @@ class ContinuousStreamingEngine:
         self.decision_count = 0
         self.last_decision_time = 0.0
 
+        # Threading: decoder runs in daemon thread, results posted to queue
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+        self._pending_future: Optional[asyncio.Future] = None
+
     # ------------------------------------------------------------------ #
-    #  Main loop
+    #  Main loop (asyncio event loop — non-blocking I/O)
     # ------------------------------------------------------------------ #
     async def _continuous_loop(self):
         self._running = True
         while self._running:
             loop_start = time.perf_counter()
-            if self.data_source_callback:
+            if self.data_source_callback and self._pending_future is None:
                 result = self.data_source_callback()
                 if result is not None:
                     data_chunk, is_new_trial, extra_info = result
@@ -86,15 +95,41 @@ class ContinuousStreamingEngine:
                         if is_new_trial and self.state in (self.State.DEMO, self.State.EVAL):
                             self.decoder.reset()
                             self.current_extra = extra_info or {}
-                        for sample in data_chunk:
-                            if sample.shape[0] == 14:
-                                sample = sample[self.occipital_indices]
-                            decision, conf, cur_t = self.decoder.feed(sample)
-                            if decision is not None and self.state != self.State.IDLE:
-                                await self._on_decision(decision, conf, cur_t)
+                        # Offload blocking decode to thread, keep event loop free
+                        if self.state != self.State.IDLE:
+                            loop = asyncio.get_running_loop()
+                            self._pending_future = loop.run_in_executor(
+                                self._executor,
+                                self._decode_trial,
+                                data_chunk,
+                            )
+
+            # Check if threaded decode completed
+            if self._pending_future is not None and self._pending_future.done():
+                decision, conf, cur_t = self._pending_future.result()
+                self._pending_future = None
+                if decision is not None:
+                    await self._on_decision(decision, conf, cur_t)
 
             elapsed = time.perf_counter() - loop_start
             await asyncio.sleep(max(0, 0.004 - elapsed))
+
+    # ------------------------------------------------------------------ #
+    #  Blocking decode (runs in thread pool)
+    # ------------------------------------------------------------------ #
+    def _decode_trial(self, data_chunk):
+        """Feed a full trial through the decoder.  Called from a worker thread."""
+        decision = None
+        conf = 0.0
+        cur_t = 0.0
+        for sample in data_chunk:
+            if sample.shape[0] == 14:
+                sample = sample[self.occipital_indices]
+            d, c, t = self.decoder.feed(sample)
+            if d is not None:
+                decision, conf, cur_t = d, c, t
+                break
+        return decision, conf, cur_t
 
     # ------------------------------------------------------------------ #
     #  Decision handling
@@ -158,6 +193,7 @@ class ContinuousStreamingEngine:
         self._running = False
         self.state = self.State.IDLE
         self.context = {"expected_dir": None, "msg_type": None}
+        self._pending_future = None
         if self._loop_task:
             self._loop_task.cancel()
             try:
@@ -166,6 +202,7 @@ class ContinuousStreamingEngine:
                 pass
             self._loop_task = None
         self.decoder.reset()
+        self._executor.shutdown(wait=False)
 
     def set_mode(self, state: str, expected_dir=None, msg_type=None):
         self.state = state
