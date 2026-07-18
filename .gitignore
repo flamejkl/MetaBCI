@@ -158,3 +158,5 @@ cython_debug/
 .checkpoints
 /checkpoints
 .checkpoints/MetaBCIWebGame/data_self/
+MetaBCIWebGame/log.txt
+log.txt
