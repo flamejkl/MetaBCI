@@ -85,6 +85,7 @@
     const FRAME_BUF_SIZE = 64;
     const frameIntervals = new Array(FRAME_BUF_SIZE).fill(0);
     let frameIntCount = 0;
+    let frameCount = 0;           // 总帧数计数器
 
     // ==================== 刺激块布局 ====================
     // 离线实验参数: block=15%屏宽, gap=10%屏宽 (run_ssvep_experiment.py)
@@ -212,6 +213,7 @@
 
     // ==================== 刺激动画循环 ====================
     function animateStim(now) {
+        frameCount++;
         if (stimFlashing) {
             const interval = now - lastStimFrameTime;
             lastStimFrameTime = now;
@@ -290,6 +292,10 @@
             if (activeGame) activeGame.render(gameCtx);
         }
         updateStimLayout();
+        // 确保动画循环运行（全屏切换可能导致 rAF 暂停）
+        if (!stimAnimationId) {
+            stimAnimationId = requestAnimationFrame(animateStim);
+        }
     }
 
     function updateStimLayout() {
