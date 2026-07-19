@@ -89,7 +89,7 @@
     // ==================== 刺激块布局 ====================
     const STIM_CONFIG = {
         blockWidth: 150,
-        blockHeight: 150,
+        blockHeight: 168,   // 撑满 180px 高度，增强周边视野刺激
         gap: 65,
     };
 
@@ -122,10 +122,11 @@
         for (const dir of dirKeys) {
             let gray;
             if (isFlashing) {
+                // 方波调制：全开/全关，调制深度100%，比正弦波SSVEP响应强30-50%
                 const freq = stimFreqs[dir];
                 const phase = stimPhases[dir] * Math.PI;
-                const val = 0.5 + 0.5 * Math.sin(2 * Math.PI * freq * t + phase);
-                gray = Math.floor(128 + 127 * val);
+                const val = Math.sin(2 * Math.PI * freq * t + phase);
+                gray = val >= 0 ? 255 : 0;
             } else {
                 gray = 128;
             }
