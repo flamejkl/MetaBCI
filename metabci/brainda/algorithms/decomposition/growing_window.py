@@ -30,7 +30,6 @@ Reference
 import numpy as np
 import joblib
 from collections import deque
-from scipy.signal import butter, sosfilt
 
 # Default paths mirror the MetaBCIWebGame convention; override via __init__
 _DEFAULT_MODEL_PATHS = {
@@ -57,8 +56,6 @@ class GrowingWindowDecoder:
         margin_th=0.35,
         max_th=0.75,
         cons_req=1,
-        filter_band=(7, 22),
-        filter_order=4,
         enable_online_norm=True,
         enable_adaptive_threshold=True,
     ):
@@ -91,11 +88,6 @@ class GrowingWindowDecoder:
 
         # ---- consecutive-decision history ----
         self.history = deque(maxlen=self.cons_req)
-
-        # ---- pre-compute filter ----
-        fs = self.sample_rate
-        self._sos = butter(filter_order, filter_band, btype='bandpass',
-                           fs=fs, output='sos')
 
         # ---- cache ----
         self._cached_window = None
@@ -241,9 +233,13 @@ class GrowingWindowDecoder:
         ])
 
     def _preprocess(self, window):
-        window = window - np.mean(window, axis=1, keepdims=True)
-        filtered = sosfilt(self._sos, window, axis=-1)
-        return window + 0.5 * filtered
+        """Match training pipeline: per-channel detrend only.
+
+        The model (FBTDCA/FBTRCA) includes its own filterbank — applying an
+        extra bandpass + blend here would distort the subband power
+        distribution and destroy classification accuracy.
+        """
+        return window - np.mean(window, axis=1, keepdims=True)
 
     def _best_model_len(self, L):
         for wl in self.model_lengths:
