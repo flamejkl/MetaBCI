@@ -212,8 +212,26 @@
     }
 
     // ==================== 刺激动画循环 ====================
+    let fpsDisplay = 0;
+    let fpsLastCheck = performance.now();
+    let fpsFrameCount = 0;
     function animateStim(now) {
         frameCount++;
+        // ---- FPS 计算（每秒更新） ----
+        fpsFrameCount++;
+        if (now - fpsLastCheck >= 1000) {
+            fpsDisplay = Math.round(fpsFrameCount * 1000 / (now - fpsLastCheck));
+            fpsFrameCount = 0;
+            fpsLastCheck = now;
+            const fpsEl = document.getElementById('fps-counter');
+            const fpsFloat = document.getElementById('fps-counter-float');
+            [fpsEl, fpsFloat].forEach(el => {
+                if (el) {
+                    el.textContent = fpsDisplay + ' FPS';
+                    el.style.color = fpsDisplay >= 165 ? '#4caf50' : fpsDisplay >= 120 ? '#ffeb3b' : '#f44336';
+                }
+            });
+        }
         if (stimFlashing) {
             const interval = now - lastStimFrameTime;
             lastStimFrameTime = now;
