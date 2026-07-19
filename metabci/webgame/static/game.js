@@ -87,26 +87,44 @@
     let frameIntCount = 0;
 
     // ==================== 刺激块布局 ====================
+    // 离线实验参数: block=15%屏宽, gap=10%屏宽 (run_ssvep_experiment.py)
+    // 全屏用 vw/vh 比例；普通模式用固定像素
+    const STIM_RATIO = { block: 0.15, gap: 0.10 };
     const STIM_CONFIG = {
         blockWidth: 150,
-        blockHeight: 168,   // 撑满 180px 高度，增强周边视野刺激
+        blockHeight: 168,
         gap: 65,
     };
 
     let positions = {};
 
     function initStimPositions() {
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
         const cw = stimCanvas.width;
         const ch = stimCanvas.height;
-        const totalW = STIM_CONFIG.blockWidth * 4 + STIM_CONFIG.gap * 3;
+
+        let bw, bh, gap;
+        if (isFs) {
+            // 匹配离线实验比例: block=15vw, gap=10vw
+            bw = Math.round(STIM_RATIO.block * window.innerWidth);
+            gap = Math.round(STIM_RATIO.gap * window.innerWidth);
+            bh = Math.min(bw, ch - 8);   // 正方形，不超过 canvas 高度
+            bw = Math.min(bw, bh);
+        } else {
+            bw = STIM_CONFIG.blockWidth;
+            bh = STIM_CONFIG.blockHeight;
+            gap = STIM_CONFIG.gap;
+        }
+
+        const totalW = bw * 4 + gap * 3;
         const startX = (cw - totalW) / 2;
-        const baseY = (ch - STIM_CONFIG.blockHeight) / 2;
+        const baseY = (ch - bh) / 2;
         const dirOrder = ['up', 'down', 'left', 'right'];
         const pos = {};
         dirOrder.forEach((dir, i) => {
-            const x = startX + i * (STIM_CONFIG.blockWidth + STIM_CONFIG.gap) + STIM_CONFIG.blockWidth / 2;
-            const y = baseY + STIM_CONFIG.blockHeight / 2;
-            pos[dir] = { x, y, w: STIM_CONFIG.blockWidth, h: STIM_CONFIG.blockHeight };
+            const x = startX + i * (bw + gap) + bw / 2;
+            const y = baseY + bh / 2;
+            pos[dir] = { x, y, w: bw, h: bh };
         });
         return pos;
     }
@@ -216,6 +234,92 @@
         }
         drawStimuli(now);
         stimAnimationId = requestAnimationFrame(animateStim);
+    }
+
+    // ==================== 全屏切换 ====================
+    function toggleFullscreen() {
+        if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+            const el = document.documentElement;
+            if (el.requestFullscreen) {
+                el.requestFullscreen().catch(e => console.warn('全屏请求失败:', e));
+            } else if (el.webkitRequestFullscreen) {
+                el.webkitRequestFullscreen();
+            }
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            }
+        }
+    }
+
+    function applyFullscreenLayout(entering) {
+        const btn = document.getElementById('btn-fullscreen');
+        if (entering) {
+            document.body.classList.add('fullscreen');
+            btn.textContent = '⛶ 退出全屏';
+            // 调整 gameCanvas：填满 stimCanvas 上方的空间
+            resizeGameForFullscreen();
+        } else {
+            document.body.classList.remove('fullscreen');
+            btn.textContent = '⛶ 全屏';
+            // 恢复默认尺寸
+            gameCanvas.width = 800;
+            gameCanvas.height = 800;
+            gameCanvas.style.width = '800px';
+            gameCanvas.style.height = '800px';
+            gameCanvas.style.borderRadius = '20px 20px 0 0';
+            if (activeGame) activeGame.render(gameCtx);
+        }
+        // 更新刺激块位置和尺寸
+        updateStimLayout();
+    }
+
+    function updateStimLayout() {
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        if (isFs) {
+            // 全屏：stimCanvas 填满底部 25vh × 100vw
+            stimCanvas.width = window.innerWidth;
+            stimCanvas.height = Math.round(window.innerHeight * 0.25);
+            stimCanvas.style.width = '100vw';
+            stimCanvas.style.height = '25vh';
+        } else {
+            // 普通模式
+            stimCanvas.width = 800;
+            stimCanvas.height = 180;
+            stimCanvas.style.width = '800px';
+            stimCanvas.style.height = '180px';
+        }
+        positions = initStimPositions();
+        // 立即重绘一帧
+        drawStimuli(performance.now());
+    }
+
+    function resizeGameForFullscreen() {
+        const stimH = Math.round(window.innerHeight * 0.25);
+        const availH = window.innerHeight - stimH;
+        // 游戏 canvas 只占上方可用空间的 85%，留边距给 title 和控件
+        const size = Math.min(availH * 0.82, window.innerWidth * 0.75);
+        const s = Math.floor(size);
+        gameCanvas.width = s;
+        gameCanvas.height = s;
+        gameCanvas.style.width = s + 'px';
+        gameCanvas.style.height = s + 'px';
+        gameCanvas.style.borderRadius = '0';
+        if (activeGame) activeGame.render(gameCtx);
+    }
+
+    function onFullscreenChange() {
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+        applyFullscreenLayout(isFs);
+    }
+
+    function onFullscreenResize() {
+        if (document.fullscreenElement || document.webkitFullscreenElement) {
+            resizeGameForFullscreen();
+            updateStimLayout();
+        }
     }
 
     // ==================== 对外控制接口 ====================
@@ -2359,6 +2463,12 @@
 
         // 暴露 activeGame 到全局，方便调试
         window.activeGame = activeGame;
+
+        // ========== 全屏切换 ==========
+        document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+        window.addEventListener('resize', onFullscreenResize);
     }
 
     window.stopDemo = stopDemo;
