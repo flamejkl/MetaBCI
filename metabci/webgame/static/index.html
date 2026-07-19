@@ -246,6 +246,62 @@
         body.fullscreen footer {
             display: none;
         }
+
+        /* ---------- 全屏置信度条 ---------- */
+        #fs-conf-bar {
+            display: none;              /* 默认隐藏 */
+        }
+        body.fullscreen #fs-conf-bar {
+            display: flex;
+            position: fixed;
+            bottom: 25vh;               /* 紧贴刺激块上方 */
+            left: 0;
+            width: 100vw;
+            height: 32px;
+            z-index: 999;
+            background: rgba(0,0,0,0.75);
+            align-items: center;
+            justify-content: center;
+            gap: 2vw;
+            padding: 2px 2vw;
+            pointer-events: none;
+        }
+        .fs-bar-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            flex: 1;
+            max-width: 20vw;
+        }
+        .fs-dir {
+            color: #fff;
+            font-weight: bold;
+            font-size: 16px;
+            width: 22px;
+            text-align: center;
+            text-shadow: 0 0 6px rgba(255,255,255,0.5);
+        }
+        .fs-bar-track {
+            flex: 1;
+            height: 14px;
+            background: #333;
+            border-radius: 7px;
+            overflow: hidden;
+        }
+        .fs-bar-fill {
+            height: 100%;
+            width: 0%;
+            background: linear-gradient(90deg, #f44336, #ffeb3b, #4caf50);
+            border-radius: 7px;
+            transition: width 0.15s ease;
+        }
+        .fs-pct {
+            color: #fff;
+            font-family: monospace;
+            font-size: 13px;
+            width: 38px;
+            text-align: right;
+        }
     </style>
 </head>
 <body>
@@ -325,6 +381,30 @@
 
     <!-- 刺激 Canvas（独立于容器外，全屏时固定在屏幕底部） -->
     <canvas id="stimCanvas" width="800" height="180"></canvas>
+
+    <!-- 全屏置信度条（紧贴刺激块上方） -->
+    <div id="fs-conf-bar">
+        <div class="fs-bar-group">
+            <span class="fs-dir">↑</span>
+            <div class="fs-bar-track"><div id="fs-bar-up" class="fs-bar-fill"></div></div>
+            <span id="fs-conf-up" class="fs-pct">0%</span>
+        </div>
+        <div class="fs-bar-group">
+            <span class="fs-dir">↓</span>
+            <div class="fs-bar-track"><div id="fs-bar-down" class="fs-bar-fill"></div></div>
+            <span id="fs-conf-down" class="fs-pct">0%</span>
+        </div>
+        <div class="fs-bar-group">
+            <span class="fs-dir">←</span>
+            <div class="fs-bar-track"><div id="fs-bar-left" class="fs-bar-fill"></div></div>
+            <span id="fs-conf-left" class="fs-pct">0%</span>
+        </div>
+        <div class="fs-bar-group">
+            <span class="fs-dir">→</span>
+            <div class="fs-bar-track"><div id="fs-bar-right" class="fs-bar-fill"></div></div>
+            <span id="fs-conf-right" class="fs-pct">0%</span>
+        </div>
+    </div>
 
     <script src="game.js"></script>
 </body>

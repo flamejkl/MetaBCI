@@ -2367,14 +2367,21 @@
 
     function updateConfidenceBars(confidences) {
         const dirs = ['up', 'down', 'left', 'right'];
-        for (let i=0; i<dirs.length; i++) {
+        // 侧边栏置信度条
+        for (let i = 0; i < dirs.length; i++) {
             const bar = document.getElementById(`bar-${dirs[i]}`);
             const text = document.getElementById(`conf-${dirs[i]}`);
-            if (bar) {
-                const percent = Math.round(confidences[i] * 100);
-                bar.style.width = percent + '%';
-                if (text) text.innerText = percent + '%';
-            }
+            const percent = Math.round(confidences[i] * 100);
+            if (bar) bar.style.width = percent + '%';
+            if (text) text.innerText = percent + '%';
+        }
+        // 全屏置信度条
+        for (let i = 0; i < dirs.length; i++) {
+            const bar = document.getElementById(`fs-bar-${dirs[i]}`);
+            const text = document.getElementById(`fs-conf-${dirs[i]}`);
+            const percent = Math.round(confidences[i] * 100);
+            if (bar) bar.style.width = percent + '%';
+            if (text) text.innerText = percent + '%';
         }
     }
 
