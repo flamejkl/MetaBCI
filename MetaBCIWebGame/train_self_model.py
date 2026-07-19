@@ -19,7 +19,7 @@ from sklearn.metrics import accuracy_score
 from sklearn.model_selection import StratifiedGroupKFold
 from metabci.brainda.algorithms.decomposition.cca import FBTRCA
 from metabci.brainda.algorithms.decomposition.tdca import FBTDCA
-from fbcca_eigh import get_default_filterbank
+from metabci.brainda.algorithms.decomposition.base import generate_filterbank
 
 # ============================================================
 #  配置参数（可根据实际效果微调）
@@ -279,7 +279,11 @@ def main():
     print(f"当前试次长度为 {X_raw.shape[2]} 点（固定窗口），增强策略已适配该长度。")
 
     # 2. 生成滤波器组与参考信号
-    filterbank, filterweights = get_default_filterbank(SAMPLE_RATE)
+    # Chen 2015 default filterbank (passbands, stopbands, 250 Hz)
+    passbands = [[6, 90], [14, 90], [22, 90], [30, 90], [38, 90]]
+    stopbands = [[4, 100], [10, 100], [16, 100], [24, 100], [32, 100]]
+    filterbank = generate_filterbank(passbands, stopbands, SAMPLE_RATE)
+    filterweights = [(i + 1) ** (-1.25) + 0.25 for i in range(len(passbands))]
     filterweights = np.array(filterweights)
 
     from metabci.brainda.algorithms.decomposition.base import generate_cca_references

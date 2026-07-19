@@ -17,7 +17,7 @@ from mne.io import BaseRaw
 from metabci.brainda.datasets.tsinghua import Wang2016
 from metabci.brainda.algorithms.decomposition.cca import FBTRCA
 from metabci.brainda.algorithms.decomposition.tdca import FBTDCA
-from fbcca_eigh import get_default_filterbank
+from metabci.brainda.algorithms.decomposition.base import generate_filterbank
 
 # ========== 参数配置 ==========
 TARGET_FREQS = [8.0, 10.0, 12.0, 15.0]          # 目标频率（顺序对应上、下、左、右）
@@ -151,7 +151,10 @@ print(f"总数据: {X.shape}, 标签分布: {np.bincount(y)}")
 print(f"被试分布: {np.unique(subjects_arr, return_counts=True)}")
 
 # 生成滤波器组和权重（与训练保持一致）
-filterbank, filterweights = get_default_filterbank(SAMPLE_RATE)
+passbands = [[6, 90], [14, 90], [22, 90], [30, 90], [38, 90]]
+stopbands = [[4, 100], [10, 100], [16, 100], [24, 100], [32, 100]]
+filterbank = generate_filterbank(passbands, stopbands, SAMPLE_RATE)
+filterweights = [(i + 1) ** (-1.25) + 0.25 for i in range(len(passbands))]
 filterweights = np.array(filterweights)
 
 # 生成所有频率的参考信号 Yf（FBTDCA 需要）

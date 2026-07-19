@@ -22,7 +22,7 @@ from train_self_model import (
 )
 from metabci.brainda.algorithms.decomposition.tdca import FBTDCA
 from metabci.brainda.algorithms.decomposition.base import generate_cca_references
-from fbcca_eigh import get_default_filterbank
+from metabci.brainda.algorithms.decomposition.base import generate_filterbank
 
 DATA_ROOT = os.path.join(BASE_DIR, "data_self")
 TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
@@ -37,7 +37,10 @@ MODEL_OUTPUTS = {
 
 
 def main():
-    filterbank, filterweights = get_default_filterbank(SAMPLE_RATE)
+    passbands = [[6, 90], [14, 90], [22, 90], [30, 90], [38, 90]]
+    stopbands = [[4, 100], [10, 100], [16, 100], [24, 100], [32, 100]]
+    filterbank = generate_filterbank(passbands, stopbands, SAMPLE_RATE)
+    filterweights = [(i + 1) ** (-1.25) + 0.25 for i in range(len(passbands))]
 
     for L in [125, 250, 375, 500]:
         print(f"\n{'='*60}")
