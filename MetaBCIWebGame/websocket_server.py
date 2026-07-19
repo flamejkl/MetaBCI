@@ -119,12 +119,26 @@ class SimulatedDataGenerator:
 
 
 def _make_next_acq_sample(acq):
-    """构建实时采集数据源回调（闭包捕获 acq 引用）。"""
+    """构建实时采集数据源回调（闭包捕获 acq 引用）。
+
+    每次调用返回自上次读取以来 eeg_buffer 中新增的所有采样点，
+    作为 batch 一次性喂给解码器，避免逐点重复读取导致缓冲区充满重复值。
+    """
+    read_cursor = [0]
+
     def _next():
-        sample = acq.get_latest_sample() if acq else None
-        if sample is None:
+        if acq is None:
             return None, False, {}
-        return sample[np.newaxis, :], False, {}
+        with acq._lock:
+            total = len(acq.eeg_buffer)
+            if total <= read_cursor[0]:
+                return None, False, {}
+            new = acq.eeg_buffer[read_cursor[0]:total]
+            read_cursor[0] = total
+        if not new:
+            return None, False, {}
+        data = np.array(new, dtype=np.float64)          # (n_new, n_channels)
+        return data, False, {}
     return _next
 
 
