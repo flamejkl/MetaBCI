@@ -165,36 +165,28 @@
         }
 
         /* ================================================================
-           全屏模式
-           布局: 上方[游戏(左) + 置信度(右)] + 底部[刺激块满宽]
+           全屏模式 — 使用 position:fixed 精确定位，不依赖 DOM 顺序
+           布局: 顶栏(36px) + 中间(游戏左+侧边栏右) + 底部刺激(26vh)
            ================================================================ */
         body.fullscreen {
             background: #0a0a0a;
             padding: 0;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            height: 100vh;
             width: 100vw;
+            height: 100vh;
         }
-        /* ---- 顶部区域：游戏 + 侧边栏 ---- */
-        body.fullscreen .fullscreen-top {
-            display: flex;
-            flex-direction: row;
-            flex: 1;
-            min-height: 0;
-            width: 100%;
-        }
-        /* ---- 全屏标题栏 ---- */
+        /* ---- 全屏标题栏 (fixed top) ---- */
         body.fullscreen .fullscreen-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
+            display: flex !important;
+            position: fixed;
+            top: 0; left: 0; right: 0;
             height: 36px;
             padding: 0 16px;
             background: #111;
             border-bottom: 1px solid #333;
-            flex-shrink: 0;
+            z-index: 100;
+            align-items: center;
+            justify-content: space-between;
         }
         body.fullscreen .fullscreen-header h1 {
             font-size: 1rem;
@@ -202,24 +194,28 @@
             margin: 0;
             font-weight: normal;
         }
-        body.fullscreen .fullscreen-header .header-actions {
+        body.fullscreen .header-actions {
             display: flex;
             gap: 8px;
             align-items: center;
         }
+
+        /* ---- 游戏主容器 (fixed, 左上区域) ---- */
         body.fullscreen .container {
+            position: fixed;
+            top: 36px;
+            left: 0;
+            right: 200px;        /* 给侧边栏留空间 */
+            bottom: 26vh;        /* 给刺激块留空间 */
             background: transparent;
             box-shadow: none;
             backdrop-filter: none;
             border-radius: 0;
             padding: 0;
             max-width: none;
-            width: auto;
             display: flex;
             align-items: center;
             justify-content: center;
-            flex: 1;
-            min-width: 0;
         }
         body.fullscreen header {
             display: none;
@@ -244,26 +240,30 @@
             box-shadow: 0 0 30px rgba(0,0,0,0.5);
         }
         body.fullscreen .maze-controls-container {
-            display: none;           /* 全屏时隐藏迷宫控件 */
+            display: none;
         }
         body.fullscreen footer {
             display: none;
         }
 
-        /* ---- 右侧置信度侧边栏 ---- */
+        /* ---- 右侧置信度侧边栏 (fixed right) ---- */
         body.fullscreen #fs-conf-sidebar {
-            display: flex;
+            display: flex !important;
+            position: fixed;
+            top: 36px;
+            right: 0;
+            width: 200px;
+            bottom: 26vh;
             flex-direction: column;
             justify-content: center;
             gap: 12px;
-            width: 200px;
-            flex-shrink: 0;
             padding: 16px 14px;
             background: rgba(255,255,255,0.03);
             border-left: 1px solid #2a2a2a;
+            z-index: 50;
         }
         #fs-conf-sidebar {
-            display: none;           /* 默认隐藏 */
+            display: none;
         }
         body.fullscreen #fs-conf-sidebar .fs-sb-title {
             color: #888;
@@ -311,16 +311,18 @@
         body.fullscreen .fs-sb-fill.left  { background: #81c784; }
         body.fullscreen .fs-sb-fill.right { background: #e57373; }
 
-        /* ---- 底部刺激块 ---- */
+        /* ---- 底部刺激块 (fixed bottom) ---- */
         body.fullscreen #stimCanvas {
+            position: fixed;
+            bottom: 0;
+            left: 0;
             width: 100vw;
             height: 26vh;
-            flex-shrink: 0;
             border: none;
             border-radius: 0;
             box-shadow: 0 -2px 20px rgba(0,0,0,0.6);
             pointer-events: none;
-            z-index: 10;
+            z-index: 90;
             background: #0d0d0d;
         }
 
@@ -353,8 +355,10 @@
             border-color: #555;
             font-size: 13px;
         }
-        /* ---- 隐藏旧水平置信度条 ---- */
+
+        /* ---- 隐藏旧水平置信度条及非全屏元素 ---- */
         #fs-conf-bar { display: none !important; }
+        body.fullscreen .fullscreen-top { display: none; }  /* 不使用 flex 布局 */
     </style>
 </head>
 <body>
