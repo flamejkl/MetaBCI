@@ -322,7 +322,11 @@
         gameCanvas.style.width = size + 'px';
         gameCanvas.style.height = size + 'px';
         gameCanvas.style.borderRadius = '8px';
-        if (activeGame) activeGame.render(gameCtx);
+        // 重初始化游戏以适配新 canvas 尺寸（迷宫 cell_size 等依赖 canvas 宽高）
+        if (activeGame) {
+            activeGame.init();
+            activeGame.render(gameCtx);
+        }
         // 更新全屏标题栏得分
         const fsScore = document.getElementById('fs-score');
         if (fsScore) {
