@@ -84,32 +84,40 @@ class ContinuousStreamingEngine:
     #  Main loop (asyncio event loop — non-blocking I/O)
     # ------------------------------------------------------------------ #
     async def _continuous_loop(self):
+        import traceback
         self._running = True
         while self._running:
             loop_start = time.perf_counter()
-            if self.data_source_callback and self._pending_future is None:
-                result = self.data_source_callback()
-                if result is not None:
-                    data_chunk, is_new_trial, extra_info = result
-                    if data_chunk is not None:
-                        if is_new_trial and self.state in (self.State.DEMO, self.State.EVAL):
-                            self.decoder.reset()
-                            self.current_extra = extra_info or {}
-                        # Offload blocking decode to thread, keep event loop free
-                        if self.state != self.State.IDLE:
-                            loop = asyncio.get_running_loop()
-                            self._pending_future = loop.run_in_executor(
-                                self._executor,
-                                self._decode_trial,
-                                data_chunk,
-                            )
+            try:
+                if self.data_source_callback and self._pending_future is None:
+                    result = self.data_source_callback()
+                    if result is not None:
+                        data_chunk, is_new_trial, extra_info = result
+                        if data_chunk is not None:
+                            if is_new_trial and self.state in (self.State.DEMO, self.State.EVAL):
+                                self.decoder.reset()
+                                self.current_extra = extra_info or {}
+                            # Offload blocking decode to thread, keep event loop free
+                            if self.state != self.State.IDLE:
+                                loop = asyncio.get_running_loop()
+                                self._pending_future = loop.run_in_executor(
+                                    self._executor,
+                                    self._decode_trial,
+                                    data_chunk,
+                                )
 
-            # Check if threaded decode completed
-            if self._pending_future is not None and self._pending_future.done():
-                decision, conf, cur_t = self._pending_future.result()
-                self._pending_future = None
-                if decision is not None:
-                    await self._on_decision(decision, conf, cur_t)
+                # Check if threaded decode completed
+                if self._pending_future is not None and self._pending_future.done():
+                    try:
+                        decision, conf, cur_t = self._pending_future.result()
+                    except Exception as e:
+                        traceback.print_exc()
+                        decision, conf, cur_t = None, 0.0, 0.0
+                    self._pending_future = None
+                    if decision is not None:
+                        await self._on_decision(decision, conf, cur_t)
+            except Exception:
+                traceback.print_exc()
 
             elapsed = time.perf_counter() - loop_start
             await asyncio.sleep(max(0, 0.004 - elapsed))
@@ -119,16 +127,21 @@ class ContinuousStreamingEngine:
     # ------------------------------------------------------------------ #
     def _decode_trial(self, data_chunk):
         """Feed a full trial through the decoder.  Called from a worker thread."""
+        import traceback
         decision = None
         conf = 0.0
         cur_t = 0.0
-        for sample in data_chunk:
-            if sample.shape[0] == 14:
-                sample = sample[self.occipital_indices]
-            d, c, t = self.decoder.feed(sample)
-            if d is not None:
-                decision, conf, cur_t = d, c, t
-                break
+        try:
+            for i, sample in enumerate(data_chunk):
+                if sample.shape[0] == 14:
+                    sample = sample[self.occipital_indices]
+                d, c, t = self.decoder.feed(sample)
+                if d is not None:
+                    decision, conf, cur_t = d, c, t
+                    break
+        except Exception:
+            # 解码器异常不应导致整个引擎崩溃
+            traceback.print_exc()
         return decision, conf, cur_t
 
     # ------------------------------------------------------------------ #
@@ -185,6 +198,8 @@ class ContinuousStreamingEngine:
     async def start(self):
         if self._running:
             return
+        # 重建 executor，防止复用已 shutdown 的线程池
+        self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self._loop_task = asyncio.create_task(self._continuous_loop())
 
     async def stop(self):

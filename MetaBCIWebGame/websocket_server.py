@@ -244,6 +244,7 @@ class WebSocketServer:
         force_log("进入 _stop_all (async)")
         if self.engine:
             await self.engine.stop()
+            self.engine = None       # 必须置空，否则下次 _load_model_and_engine 复用已停止的引擎
         if self.acq:
             self.acq.stop_acquisition()
             self.acq = None
