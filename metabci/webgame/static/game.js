@@ -1973,6 +1973,11 @@
         document.getElementById('btn-demo-start').disabled = false;
         document.getElementById('btn-demo-stop').disabled = true;
 
+        // 通知后端停止评测
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({type: "stop_eval"}));
+        }
+
         if (stimFlashing) stopStimuli();
         if (realtimeActive) stopRealtime();
         if (activeGame) activeGame.render(gameCtx);
@@ -2333,6 +2338,9 @@
         if (evalStartBtn) evalStartBtn.addEventListener('click', () => {
             startEvalMode(null, 'online');
         });
+
+        const evalStopBtn = document.getElementById('btn-eval-stop');
+        if (evalStopBtn) evalStopBtn.addEventListener('click', stopEvalMode);
 
         ['demo-log', 'demo-summary', 'demo-progress'].forEach(id => {
             const el = document.getElementById(id);
