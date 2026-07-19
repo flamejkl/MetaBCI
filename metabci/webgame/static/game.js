@@ -233,6 +233,16 @@
             }
         }
         drawStimuli(now);
+        // 全屏模式下每 30 帧更新一次分数显示
+        if ((document.fullscreenElement || document.webkitFullscreenElement) && frameCount % 30 === 0) {
+            const fsScore = document.getElementById('fs-score');
+            const diaEl = document.getElementById('collectedDiamonds');
+            const totEl = document.getElementById('totalDiamonds');
+            const scoreEl = document.getElementById('score');
+            if (fsScore && diaEl && totEl && scoreEl) {
+                fsScore.textContent = `💎 ${diaEl.innerText}/${totEl.innerText}  🎯 ${scoreEl.innerText}分`;
+            }
+        }
         stimAnimationId = requestAnimationFrame(animateStim);
     }
 
@@ -255,16 +265,23 @@
     }
 
     function applyFullscreenLayout(entering) {
+        const fsHeader = document.querySelector('.fullscreen-header');
+        const fsSidebar = document.getElementById('fs-conf-sidebar');
         const btn = document.getElementById('btn-fullscreen');
+        const btnFs = document.getElementById('btn-fullscreen-fs');
         if (entering) {
             document.body.classList.add('fullscreen');
-            btn.textContent = '⛶ 退出全屏';
-            // 调整 gameCanvas：填满 stimCanvas 上方的空间
+            if (fsHeader) fsHeader.style.display = 'flex';
+            if (fsSidebar) fsSidebar.style.display = 'flex';
+            if (btn) btn.style.display = 'none';
+            if (btnFs) btnFs.style.display = '';
             resizeGameForFullscreen();
         } else {
             document.body.classList.remove('fullscreen');
-            btn.textContent = '⛶ 全屏';
-            // 恢复默认尺寸
+            if (fsHeader) fsHeader.style.display = 'none';
+            if (fsSidebar) fsSidebar.style.display = 'none';
+            if (btn) btn.style.display = '';
+            if (btnFs) btnFs.style.display = 'none';
             gameCanvas.width = 800;
             gameCanvas.height = 800;
             gameCanvas.style.width = '800px';
@@ -272,42 +289,50 @@
             gameCanvas.style.borderRadius = '20px 20px 0 0';
             if (activeGame) activeGame.render(gameCtx);
         }
-        // 更新刺激块位置和尺寸
         updateStimLayout();
     }
 
     function updateStimLayout() {
         const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
         if (isFs) {
-            // 全屏：stimCanvas 填满底部 25vh × 100vw
             stimCanvas.width = window.innerWidth;
-            stimCanvas.height = Math.round(window.innerHeight * 0.25);
+            stimCanvas.height = Math.round(window.innerHeight * 0.26);
             stimCanvas.style.width = '100vw';
-            stimCanvas.style.height = '25vh';
+            stimCanvas.style.height = '26vh';
         } else {
-            // 普通模式
             stimCanvas.width = 800;
             stimCanvas.height = 180;
             stimCanvas.style.width = '800px';
             stimCanvas.style.height = '180px';
         }
         positions = initStimPositions();
-        // 立即重绘一帧
         drawStimuli(performance.now());
     }
 
     function resizeGameForFullscreen() {
-        const stimH = Math.round(window.innerHeight * 0.25);
-        const availH = window.innerHeight - stimH;
-        // 游戏 canvas 只占上方可用空间的 85%，留边距给 title 和控件
-        const size = Math.min(availH * 0.82, window.innerWidth * 0.75);
-        const s = Math.floor(size);
-        gameCanvas.width = s;
-        gameCanvas.height = s;
-        gameCanvas.style.width = s + 'px';
-        gameCanvas.style.height = s + 'px';
-        gameCanvas.style.borderRadius = '0';
+        const headerH = 36;
+        const stimH = Math.round(window.innerHeight * 0.26);
+        const sidebarW = 200;
+        const availH = window.innerHeight - headerH - stimH;
+        const availW = window.innerWidth - sidebarW;
+        // 正方形游戏画布，留一些 padding
+        const size = Math.floor(Math.min(availH * 0.88, availW * 0.85));
+        gameCanvas.width = size;
+        gameCanvas.height = size;
+        gameCanvas.style.width = size + 'px';
+        gameCanvas.style.height = size + 'px';
+        gameCanvas.style.borderRadius = '8px';
         if (activeGame) activeGame.render(gameCtx);
+        // 更新全屏标题栏得分
+        const fsScore = document.getElementById('fs-score');
+        if (fsScore) {
+            const scoreEl = document.getElementById('score');
+            const diaEl = document.getElementById('collectedDiamonds');
+            const totEl = document.getElementById('totalDiamonds');
+            if (scoreEl && diaEl && totEl) {
+                fsScore.textContent = `💎 ${diaEl.innerText}/${totEl.innerText}  🎯 ${scoreEl.innerText}分`;
+            }
+        }
     }
 
     function onFullscreenChange() {
@@ -2367,7 +2392,7 @@
 
     function updateConfidenceBars(confidences) {
         const dirs = ['up', 'down', 'left', 'right'];
-        // 侧边栏置信度条
+        // 侧边栏置信度条（普通模式）
         for (let i = 0; i < dirs.length; i++) {
             const bar = document.getElementById(`bar-${dirs[i]}`);
             const text = document.getElementById(`conf-${dirs[i]}`);
@@ -2375,10 +2400,10 @@
             if (bar) bar.style.width = percent + '%';
             if (text) text.innerText = percent + '%';
         }
-        // 全屏置信度条
+        // 全屏右侧置信度侧边栏
         for (let i = 0; i < dirs.length; i++) {
-            const bar = document.getElementById(`fs-bar-${dirs[i]}`);
-            const text = document.getElementById(`fs-conf-${dirs[i]}`);
+            const bar = document.getElementById(`fs-sb-bar-${dirs[i]}`);
+            const text = document.getElementById(`fs-sb-pct-${dirs[i]}`);
             const percent = Math.round(confidences[i] * 100);
             if (bar) bar.style.width = percent + '%';
             if (text) text.innerText = percent + '%';
@@ -2473,6 +2498,8 @@
 
         // ========== 全屏切换 ==========
         document.getElementById('btn-fullscreen').addEventListener('click', toggleFullscreen);
+        const btnFs = document.getElementById('btn-fullscreen-fs');
+        if (btnFs) btnFs.addEventListener('click', toggleFullscreen);
         document.addEventListener('fullscreenchange', onFullscreenChange);
         document.addEventListener('webkitfullscreenchange', onFullscreenChange);
         window.addEventListener('resize', onFullscreenResize);
