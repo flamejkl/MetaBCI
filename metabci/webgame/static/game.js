@@ -88,9 +88,9 @@
     let frameCount = 0;           // 总帧数计数器
 
     // ==================== 刺激块布局 ====================
-    // 离线实验参数: block=15%屏宽, gap=10%屏宽 (run_ssvep_experiment.py)
+    // 离线实验参数 (run_ssvep_experiment.py: block=0.12屏宽, gap=0.1屏宽)
     // 全屏用 vw/vh 比例；普通模式用固定像素
-    const STIM_RATIO = { block: 0.15, gap: 0.10 };
+    const STIM_RATIO = { block: 0.12, gap: 0.10 };
     const STIM_CONFIG = {
         blockWidth: 150,
         blockHeight: 168,
@@ -141,11 +141,11 @@
         for (const dir of dirKeys) {
             let gray;
             if (isFlashing) {
-                // 方波调制：全开/全关，调制深度100%，比正弦波SSVEP响应强30-50%
+                // 正弦波调制 — 与训练实验 stimtype='sinusoid' 完全一致
                 const freq = stimFreqs[dir];
                 const phase = stimPhases[dir] * Math.PI;
                 const val = Math.sin(2 * Math.PI * freq * t + phase);
-                gray = val >= 0 ? 255 : 0;
+                gray = Math.floor(128 + 127 * val);   // 1~255 正弦灰度
             } else {
                 gray = 128;
             }
