@@ -168,13 +168,15 @@ def _apply_frequency_jitter(aug, rng, jitter=0.03):
 # ============================================================
 #  数据加载（修改2：返回 groups）
 # ============================================================
-def load_data_from_dirs(root, use_occipital=True):
+def load_data_from_dirs(root, use_occipital=True, window_samples=None,
+                        offset_only=True):
     """
     加载原始数据（不做增强）。
-    返回: X (n_trials, n_channels, 500), y (n_trials,), groups (n_trials,)
+    window_samples: 截取前 N 个采样点，None=全取
+    offset_only: 仅加载 offset000 文件
+    返回: X (n_trials, n_channels, samples), y (n_trials,), groups (n_trials,)
     """
-    X_list, y_list = [], []
-    groups_list = []
+    X_list, y_list, groups_list = [], [], []
 
     for label in range(4):
         dir_path = os.path.join(root, str(label + 1))
@@ -182,12 +184,14 @@ def load_data_from_dirs(root, use_occipital=True):
             continue
         files = [f for f in os.listdir(dir_path) if f.endswith('.npy')]
         for fname in files:
-            # ========== 新增：只加载偏移 0 的文件 ==========
-            if "offset000" not in fname:
+            if offset_only and "offset000" not in fname:
                 continue
-            # =============================================
 
             data = np.load(os.path.join(dir_path, fname))
+            if window_samples is not None:
+                if data.shape[1] < window_samples:
+                    continue
+                data = data[:, :window_samples]
             X_list.append(data)
             y_list.append(label)
 
