@@ -202,7 +202,7 @@ class WebSocketServer:
     def _init_gw_decoder(self):
         if self.gw_decoder is None:
             try:
-                self.gw_decoder = GrowingWindowDecoder(model_paths=GW_MODEL_PATHS)
+                self.gw_decoder = GrowingWindowDecoder(model_paths=GW_MODEL_PATHS, enable_online_norm=False)
                 log("✅ Growing Window 解码器已初始化")
             except Exception as e:
                 log(f"❌ Growing Window 解码器初始化失败: {e}")
