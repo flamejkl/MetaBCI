@@ -29,7 +29,7 @@ collect_phase = None                    # 'preview'|'index'|'rest'|'stimulus'
 
 
 def create_window():
-    """创建 PsychoPy 窗口（屏幕底部条带）。"""
+    """创建 PsychoPy 无边框窗口（屏幕底部条带）。"""
     from psychopy import monitors as mon
     m = mon.Monitor('stimMonitor', width=53, distance=60, verbose=False)
     m.setSizePix([1920, 1080])
@@ -39,13 +39,31 @@ def create_window():
         monitor=m,
         size=[scr_width, win_height],
         pos=[0, scr_height - win_height],
-        color='black', colorSpace='rgb',
+        color=[-1, -1, -1], colorSpace='rgb',  # 纯黑背景
         fullscr=False,
         screen=0,
         units='pix',
         winType='pyglet',
         allowGUI=False,
+        waitBlanking=True,       # 垂直同步，保证165Hz
     )
+    # 设为无边框 + 置顶
+    try:
+        win.winHandle.set_location(0, scr_height - win_height)
+        import pyglet
+        # 移除窗口装饰
+        win.winHandle._window.style = 'borderless'
+        # 或尝试 set_style
+        try:
+            win.winHandle._window.set_style('borderless')
+        except Exception:
+            pass
+        # 始终置顶
+        win.winHandle.activate()
+        if hasattr(win.winHandle, 'set_z_order'):
+            win.winHandle.set_z_order(1)
+    except Exception as e:
+        print(f"[PsychoPy] 无边框设置失败: {e}")
     return win
 
 
