@@ -160,3 +160,7 @@ cython_debug/
 .checkpoints/MetaBCIWebGame/data_self/
 MetaBCIWebGame/log.txt
 log.txt
+
+*.pkl.bak
+*_new.pkl
+
