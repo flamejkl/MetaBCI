@@ -156,14 +156,13 @@ def draw_flash(win, blocks, elapsed):
 # ---- 主渲染循环 ----
 def render_loop(win, blocks):
     """主循环：根据全局状态渲染刺激块。"""
-    global stim_flashing, stim_start_time, current_target, collect_phase
+    global stim_flashing, stim_start_time, current_target, collect_phase, cue_deadline
     clock = core.Clock()
     trial_start = 0.0
 
     while True:
         t = clock.getTime()
 
-        # 短暂提示高亮 → 自动回到闪烁
         if cue_deadline > 0 and t > cue_deadline:
             cue_deadline = 0.0
 
@@ -200,7 +199,7 @@ def render_loop(win, blocks):
 # ---- WebSocket 客户端 ----
 async def ws_client():
     """连接后端 WebSocket，接收指令。"""
-    global stim_flashing, stim_start_time, current_target, collect_phase
+    global stim_flashing, stim_start_time, current_target, collect_phase, cue_deadline
 
     while True:
         try:
