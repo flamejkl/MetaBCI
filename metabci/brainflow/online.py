@@ -79,6 +79,7 @@ class ContinuousStreamingEngine:
         # Threading: decoder runs in daemon thread, results posted to queue
         self._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
         self._pending_future: Optional[asyncio.Future] = None
+        self._reset_requested = False
 
     # ------------------------------------------------------------------ #
     #  Main loop (asyncio event loop — non-blocking I/O)
@@ -89,6 +90,11 @@ class ContinuousStreamingEngine:
         while self._running:
             loop_start = time.perf_counter()
             try:
+                # 安全重置：在批次间执行，避免与工作线程冲突
+                if self._reset_requested and self._pending_future is None:
+                    self.decoder.reset()
+                    self._reset_requested = False
+
                 if self.data_source_callback and self._pending_future is None:
                     result = self.data_source_callback()
                     if result is not None:
@@ -223,11 +229,9 @@ class ContinuousStreamingEngine:
         self.decoder.reset()
         self._executor.shutdown(wait=False)
 
-    async def safe_reset_decoder(self):
-        """线程安全重置解码器 — 等待工作线程完成当前批次后再重置。"""
-        while self._pending_future is not None:
-            await asyncio.sleep(0.002)
-        self.decoder.reset()
+    def request_reset(self):
+        """请求安全重置解码器（由引擎循环在批次间执行）。"""
+        self._reset_requested = True
 
     def set_mode(self, state: str, expected_dir=None, msg_type=None):
         self.state = state
