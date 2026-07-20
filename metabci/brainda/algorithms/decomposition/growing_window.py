@@ -163,13 +163,6 @@ class GrowingWindowDecoder:
         max_score = np.max(scores)
         decision = np.argmax(scores)
 
-        # ---- 调试：打印即时分数 ----
-        if L % 125 == 0:  # 每 0.5s 打印一次
-            dirs = ['up', 'down', 'left', 'right']
-            print(f"[Decoder] L={L} ({L/self.sample_rate:.1f}s) "
-                  f"scores=[{', '.join(f'{dirs[i]}:{scores[i]:.3f}' for i in range(4))}] "
-                  f"margin={margin:.3f} max={max_score:.3f} → {dirs[decision]}", flush=True)
-
         self._cached_window = window
         self._cached_model_len = model_len
 

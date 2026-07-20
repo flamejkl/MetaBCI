@@ -135,20 +135,17 @@ class ContinuousStreamingEngine:
     # ------------------------------------------------------------------ #
     def _decode_trial(self, data_chunk):
         """Feed a full trial through the decoder.  Called from a worker thread."""
-        import traceback, sys
+        import traceback
         decision = None
         conf = 0.0
         cur_t = 0.0
-        n = len(data_chunk)
-        print(f"[Decode] 批次 {n} 样本 start", flush=True)
         try:
-            for i, sample in enumerate(data_chunk):
+            for sample in data_chunk:
                 if sample.shape[0] == 14:
                     sample = sample[self.occipital_indices]
                 d, c, t = self.decoder.feed(sample)
                 if d is not None:
                     decision, conf, cur_t = d, c, t
-                    print(f"[Decode] 决策! dir={['up','down','left','right'][d]} conf={c:.3f} t={t:.2f}s (sample {i}/{n})", flush=True)
                     break
         except Exception:
             traceback.print_exc()
