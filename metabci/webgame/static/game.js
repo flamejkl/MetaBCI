@@ -2447,7 +2447,6 @@
         for (const dir of dirKeys) {
             const pos = positions[dir];
             if (!pos) continue;
-            // 目标块亮白(255)，其余暗灰(60) — 亮度对比已足够指示方向
             const gray = (dir === targetDir) ? 255 : 60;
             stimCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
             stimCtx.fillRect(pos.x - pos.w/2, pos.y - pos.h/2, pos.w, pos.h);
@@ -2458,6 +2457,30 @@
             stimCtx.textBaseline = 'middle';
             stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
         }
+        // 红色三角指示箭头 (⯆，离线实验同款)
+        const upPos = positions['up'], downPos = positions['down'];
+        const leftPos = positions['left'], rightPos = positions['right'];
+        const triSize = Math.round(Math.min(upPos.w, upPos.h) * 0.8);
+        const triY = upPos.y;  // 与刺激块同一水平线
+        let triX, angle;
+        if (targetDir === 'up' || targetDir === 'down') {
+            // 左箭头：↑↓ 之间
+            triX = (upPos.x + upPos.w/2 + downPos.x - downPos.w/2) / 2;
+            angle = (targetDir === 'up') ? Math.PI : 0;  // 上:180°, 下:0°
+        } else {
+            // 右箭头：←→ 之间
+            triX = (leftPos.x + leftPos.w/2 + rightPos.x - rightPos.w/2) / 2;
+            angle = (targetDir === 'left') ? -Math.PI / 2 : Math.PI / 2;  // 左:-90°, 右:90°
+        }
+        stimCtx.save();
+        stimCtx.translate(triX, triY);
+        stimCtx.rotate(angle);
+        stimCtx.fillStyle = '#ff0000';
+        stimCtx.font = `bold ${triSize}px Arial`;
+        stimCtx.textAlign = 'center';
+        stimCtx.textBaseline = 'middle';
+        stimCtx.fillText('⯆', 0, 0);
+        stimCtx.restore();
     }
 
     function drawRestFrame() {

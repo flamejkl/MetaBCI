@@ -124,13 +124,27 @@ def draw_index(win, blocks, target_dir):
         b['rect'].draw()
         b['label'].color = [-1, -1, -1] if is_target else [1, 1, 1]
         b['label'].draw()
-    # 绘制红色三角指示符（与离线实验 config_index 一致）
-    target = next(b for b in blocks if b['dir'] == target_dir)
+    # 红色三角指示符 — 放在刺激块间隔中（与网页版对齐）
+    b_up = next(b for b in blocks if b['dir'] == 'up')
+    b_down = next(b for b in blocks if b['dir'] == 'down')
+    b_left = next(b for b in blocks if b['dir'] == 'left')
+    b_right = next(b for b in blocks if b['dir'] == 'right')
+    tri_size = min(b_up['size'], b_up['size']) * 0.8
+    tri_y = b_up['y']  # 与刺激块同一水平线
+
+    if target_dir in ('up', 'down'):
+        tri_x = (b_up['x'] + b_up['size']/2 + b_down['x'] - b_down['size']/2) / 2
+        ori = 180.0 if target_dir == 'up' else 0.0
+    else:
+        tri_x = (b_left['x'] + b_left['size']/2 + b_right['x'] - b_right['size']/2) / 2
+        ori = 270.0 if target_dir == 'left' else 90.0
+
     tri = visual.TextStim(
         win, text='⯆', font='Arial', bold=True,
         color=[1, -1, -1], colorSpace='rgb',
-        height=target['size'] * 0.5,
-        pos=[target['x'], target['y'] - target['size'] * 0.6],
+        height=tri_size,
+        pos=[tri_x, tri_y],
+        ori=ori,
         autoLog=False,
     )
     tri.draw()
