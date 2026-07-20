@@ -2422,6 +2422,7 @@
 
     function drawIndexFrame(targetDir) {
         stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
+        // 所有块灰色，目标块亮白
         for (const dir of dirKeys) {
             const pos = positions[dir];
             if (!pos) continue;
@@ -2436,23 +2437,31 @@
             stimCtx.textBaseline = 'middle';
             stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
         }
-        // 目标块下方绘制红色三角指示标 ▼
-        const tpos = positions[targetDir];
-        if (tpos) {
-            const triH = Math.round(tpos.h * 0.25);
-            const triW = Math.round(tpos.w * 0.35);
-            const cx = tpos.x, cy = tpos.y + tpos.h / 2 + triH + 4;
-            stimCtx.fillStyle = '#ff0000';
-            stimCtx.shadowBlur = 10;
-            stimCtx.shadowColor = '#ff0000';
-            stimCtx.beginPath();
-            stimCtx.moveTo(cx, cy + triH / 2);
-            stimCtx.lineTo(cx - triW / 2, cy - triH / 2);
-            stimCtx.lineTo(cx + triW / 2, cy - triH / 2);
-            stimCtx.closePath();
-            stimCtx.fill();
-            stimCtx.shadowBlur = 0;
+        // 红色三角指示符 (Unicode ⯆, 离线实验同款)
+        // 位置: ↑↓之间(左三角) / ←→之间(右三角)
+        const upPos = positions['up'], downPos = positions['down'];
+        const leftPos = positions['left'], rightPos = positions['right'];
+        const triSize = Math.round(Math.min(upPos.w, upPos.h) * 0.8);
+        const triY = (upPos.y + upPos.h/2 + downPos.y - downPos.h/2) / 2;  // 块中心Y坐标
+
+        let triX, angle;
+        if (targetDir === 'up' || targetDir === 'down') {
+            triX = (upPos.x + upPos.w/2 + downPos.x - downPos.w/2) / 2;  // ↑ ↓ 之间
+            angle = (targetDir === 'up') ? Math.PI : 0;                   // 指上:180°, 指下:0°
+        } else {
+            triX = (leftPos.x + leftPos.w/2 + rightPos.x - rightPos.w/2) / 2;  // ← → 之间
+            angle = (targetDir === 'left') ? -Math.PI / 2 : Math.PI / 2;       // 指左:-90°, 指右:90°
         }
+
+        stimCtx.save();
+        stimCtx.translate(triX, triY);
+        stimCtx.rotate(angle);
+        stimCtx.fillStyle = '#ff0000';
+        stimCtx.font = `bold ${triSize}px Arial`;
+        stimCtx.textAlign = 'center';
+        stimCtx.textBaseline = 'middle';
+        stimCtx.fillText('⯆', 0, 0);
+        stimCtx.restore();
     }
 
     function drawRestFrame() {
