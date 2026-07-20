@@ -2313,7 +2313,7 @@
     // ==================== 浏览器数据采集 ====================
     let collectMode = false, collectReady = false, collectResolve = null;
     let collectIndex = 0, collectSequence = [];
-    const COLLECT_N_PER_DIR = 10;  // 每方向10个试次，共40个
+    const COLLECT_N_PER_DIR = 40;  // 每方向40个试次，共160个
 
     async function startCollectMode() {
         if (collectMode) return;

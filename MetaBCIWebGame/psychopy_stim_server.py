@@ -20,7 +20,6 @@ BLOCK_RATIO = 0.12                       # 块视觉宽度 = 12% 屏宽 (stim_le
 POS_RATIO = 0.15                          # 块定位宽度 = 15% 屏宽 (block_ratio)
 GAP_RATIO = 0.10                          # 块间额外间隙 = 10% 屏宽
 WS_URL = "ws://localhost:8765"
-WINDOW_HEIGHT_RATIO = 0.25               # 窗口占屏幕下方 25%
 
 # ---- 全局状态 ----
 stim_flashing = False
@@ -31,8 +30,9 @@ cue_deadline = 0.0                      # 提示高亮截至时间（秒）
 
 
 def create_window():
-    """创建 PsychoPy 无边框窗口（屏幕底部条带）。"""
+    """创建 PsychoPy 底部小窗口 — 与游戏在线界面一致。"""
     from psychopy import monitors as mon
+    WINDOW_HEIGHT_RATIO = 0.25
     m = mon.Monitor('stimMonitor', width=53, distance=60, verbose=False)
     m.setSizePix([1920, 1080])
     scr_width, scr_height = m.getSizePix()
@@ -41,31 +41,14 @@ def create_window():
         monitor=m,
         size=[scr_width, win_height],
         pos=[0, scr_height - win_height],
-        color=[-1, -1, -1], colorSpace='rgb',  # 纯黑背景
+        color=(-1, -1, -1), colorSpace='rgb',
         fullscr=False,
         screen=0,
         units='pix',
         winType='pyglet',
         allowGUI=False,
-        waitBlanking=True,       # 垂直同步，保证165Hz
+        waitBlanking=True,
     )
-    # 设为无边框 + 置顶
-    try:
-        win.winHandle.set_location(0, scr_height - win_height)
-        import pyglet
-        # 移除窗口装饰
-        win.winHandle._window.style = 'borderless'
-        # 或尝试 set_style
-        try:
-            win.winHandle._window.set_style('borderless')
-        except Exception:
-            pass
-        # 始终置顶
-        win.winHandle.activate()
-        if hasattr(win.winHandle, 'set_z_order'):
-            win.winHandle.set_z_order(1)
-    except Exception as e:
-        print(f"[PsychoPy] 无边框设置失败: {e}")
     return win
 
 
