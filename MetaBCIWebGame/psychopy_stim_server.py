@@ -161,9 +161,10 @@ def render_loop(win, blocks):
     trial_start = 0.0
 
     while True:
-        t = time.perf_counter()  # 与 ws_client 的 cue_deadline 保持同一时钟
+        t = time.perf_counter()
 
-        if cue_deadline > 0 and t > cue_deadline:
+        # stim_target 短暂高亮（eval快速模式）：自动过期回到闪烁
+        if collect_phase is None and cue_deadline > 0 and t > cue_deadline:
             cue_deadline = 0.0
 
         if collect_phase == 'preview':
@@ -172,10 +173,12 @@ def render_loop(win, blocks):
             draw_index(win, blocks, current_target)
         elif collect_phase == 'rest':
             draw_rest(win, blocks)
+        elif collect_phase == 'stimulus':
+            elapsed = t - stim_start_time
+            draw_flash(win, blocks, elapsed)
         elif cue_deadline > 0 and current_target:
-            # 收到 stim_target: 短暂高亮目标块提示注视方向
             draw_index(win, blocks, current_target)
-        elif stim_flashing or collect_phase == 'stimulus':
+        elif stim_flashing:
             elapsed = t - stim_start_time
             draw_flash(win, blocks, elapsed)
         else:
