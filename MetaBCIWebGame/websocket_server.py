@@ -373,24 +373,13 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
                             continue
 
-                        # ---- PsychoPy 刺激流程 ----
+                        # ---- PsychoPy 已连接 → 发送目标方向（刺激已持续闪烁） ----
                         if self.stim_clients:
-                            # 提示阶段 (1s)
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
-                            await asyncio.sleep(1.0)
-                            # 休息阶段 (0.5s)
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "rest"})
-                            await asyncio.sleep(0.5)
-                            # 闪烁采集阶段 — 此时重置解码器
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
-                            self.engine.request_reset()
-                            if hasattr(self, '_skip_stale') and self._skip_stale:
-                                self._skip_stale()
-                        else:
-                            # 原有流程：直接重置，使用浏览器刺激块
-                            self.engine.request_reset()
-                            if hasattr(self, '_skip_stale') and self._skip_stale:
+
+                        self.engine.request_reset()
+                        if hasattr(self, '_skip_stale') and self._skip_stale:
+                            self._skip_stale()
                                 self._skip_stale()
 
                         self.engine.context["expected_dir"] = expected_dir
