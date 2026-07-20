@@ -1,0 +1,249 @@
+# psychopy_stim_server.py
+# -*- coding: utf-8 -*-
+"""
+PsychoPy SSVEP 刺激窗口 — 替代浏览器 Canvas 渲染。
+通过 WebSocket 接收指令，提供与离线实验一致的刺激质量。
+"""
+import sys, os, json, time, threading, asyncio
+import numpy as np
+import websockets
+
+# PsychoPy imports
+from psychopy import visual, core, monitors, event
+
+# ---- 配置 ----
+STIM_FREQS = [8.25, 11.0, 13.75, 16.5]
+PHASES = [0.0, 0.5, 1.0, 1.5]           # up, down, left, right (π 为单位)
+DIRS = ['up', 'down', 'left', 'right']
+FPS = 165.0                              # 显示器刷新率
+BLOCK_RATIO = 0.12                       # 块宽度 = 12% 屏宽
+GAP_RATIO = 0.10                         # 间距 = 10% 屏宽
+WS_URL = "ws://localhost:8765"
+WINDOW_HEIGHT_RATIO = 0.25               # 窗口占屏幕下方 25%
+
+# ---- 全局状态 ----
+stim_flashing = False
+stim_start_time = 0.0
+current_target = None
+collect_phase = None                    # 'preview'|'index'|'rest'|'stimulus'
+
+
+def create_window():
+    """创建 PsychoPy 窗口（屏幕底部条带）。"""
+    from psychopy import monitors as mon
+    m = mon.Monitor('stimMonitor', width=53, distance=60, verbose=False)
+    m.setSizePix([1920, 1080])
+    scr_width, scr_height = m.getSizePix()
+    win_height = int(scr_height * WINDOW_HEIGHT_RATIO)
+    win = visual.Window(
+        monitor=m,
+        size=[scr_width, win_height],
+        pos=[0, scr_height - win_height],
+        color='black', colorSpace='rgb',
+        fullscr=False,
+        screen=0,
+        units='pix',
+        winType='pyglet',
+        allowGUI=False,
+    )
+    return win
+
+
+def create_blocks(win):
+    """创建 4 个闪烁刺激块，布局与 run_ssvep_experiment.py 一致。"""
+    sw, sh = win.size
+    bw = int(sw * BLOCK_RATIO)
+    gap = int(sw * GAP_RATIO)
+    total_w = 4 * bw + 3 * gap
+    start_x = -total_w / 2 + bw / 2
+
+    blocks = []
+    for i, (freq, phase, label) in enumerate(zip(STIM_FREQS, PHASES, DIRS)):
+        x = start_x + i * (bw + gap)
+        y = 0  # 垂直居中
+        rect = visual.Rect(
+            win, width=bw, height=bw,
+            fillColor=[1, 1, 1], fillColorSpace='rgb',
+            lineColor=None,
+            pos=[x, y],
+            autoLog=False,
+        )
+        label_text = visual.TextStim(
+            win, text={'up': '↑', 'down': '↓', 'left': '←', 'right': '→'}[label],
+            font='Arial', bold=True,
+            color=[-1, -1, -1], colorSpace='rgb',
+            height=bw * 0.35,
+            pos=[x, y],
+            autoLog=False,
+        )
+        blocks.append({
+            'rect': rect, 'label': label_text,
+            'freq': freq, 'phase': phase * np.pi,
+            'dir': label, 'x': x, 'y': y, 'size': bw,
+        })
+    return blocks
+
+
+def draw_preview(win, blocks):
+    """预览阶段：所有块白色常亮。"""
+    for b in blocks:
+        b['rect'].fillColor = [1, 1, 1]
+        b['rect'].draw()
+        b['label'].color = [-1, -1, -1]
+        b['label'].draw()
+
+
+def draw_index(win, blocks, target_dir):
+    """提示阶段：目标块亮白，其余暗灰。"""
+    for b in blocks:
+        is_target = (b['dir'] == target_dir)
+        c = 1.0 if is_target else 0.25
+        b['rect'].fillColor = [c, c, c]
+        b['rect'].draw()
+        b['label'].color = [-1, -1, -1] if is_target else [1, 1, 1]
+        b['label'].draw()
+    # 绘制红色三角指示符（与离线实验 config_index 一致）
+    target = next(b for b in blocks if b['dir'] == target_dir)
+    tri = visual.TextStim(
+        win, text='⯆', font='Arial', bold=True,
+        color=[1, -1, -1], colorSpace='rgb',
+        height=target['size'] * 0.5,
+        pos=[target['x'], target['y'] - target['size'] * 0.6],
+        autoLog=False,
+    )
+    tri.draw()
+
+
+def draw_rest(win, blocks):
+    """休息阶段：十字准星。"""
+    cross_h = visual.ShapeStim(win, vertices=[(-20, 0), (20, 0)],
+                               lineWidth=3, lineColor='white', closeShape=False, autoLog=False)
+    cross_v = visual.ShapeStim(win, vertices=[(0, 20), (0, -20)],
+                               lineWidth=3, lineColor='white', closeShape=False, autoLog=False)
+    cross_h.draw()
+    cross_v.draw()
+
+
+def draw_flash(win, blocks, elapsed):
+    """闪烁阶段：正弦波调制（与训练实验完全一致）。"""
+    for b in blocks:
+        val = 0.5 + 0.5 * np.sin(2 * np.pi * b['freq'] * elapsed + b['phase'])
+        b['rect'].fillColor = [val, val, val]
+        b['rect'].draw()
+        b['label'].color = [-1, -1, -1] if val > 0.5 else [1, 1, 1]
+        b['label'].draw()
+
+
+# ---- 主渲染循环 ----
+def render_loop(win, blocks):
+    """主循环：根据全局状态渲染刺激块。"""
+    global stim_flashing, stim_start_time, current_target, collect_phase
+    clock = core.Clock()
+    trial_start = 0.0
+
+    while True:
+        t = clock.getTime()
+
+        if collect_phase == 'preview':
+            draw_preview(win, blocks)
+        elif collect_phase == 'index' and current_target:
+            draw_index(win, blocks, current_target)
+        elif collect_phase == 'rest':
+            draw_rest(win, blocks)
+        elif stim_flashing or collect_phase == 'stimulus':
+            elapsed = t - stim_start_time
+            draw_flash(win, blocks, elapsed)
+        else:
+            # 默认空闲：灰色常亮
+            for b in blocks:
+                b['rect'].fillColor = [0.5, 0.5, 0.5]
+                b['rect'].draw()
+                b['label'].color = [-1, -1, -1]
+                b['label'].draw()
+
+        win.flip()
+
+        # 按键退出
+        keys = event.getKeys(['escape', 'q'])
+        if keys:
+            break
+
+    win.close()
+    core.quit()
+
+
+# ---- WebSocket 客户端 ----
+async def ws_client():
+    """连接后端 WebSocket，接收指令。"""
+    global stim_flashing, stim_start_time, current_target, collect_phase
+
+    while True:
+        try:
+            async with websockets.connect(WS_URL) as ws:
+                print("[PsychoPy] 已连接 WebSocket")
+                await ws.send(json.dumps({"type": "stim_register"}))
+                async for msg in ws:
+                    try:
+                        data = json.loads(msg)
+                        t = data.get("type")
+
+                        if t == "stim_start":
+                            stim_flashing = True
+                            stim_start_time = time.time()
+                            print("[PsychoPy] 刺激开始")
+
+                        elif t == "stim_stop":
+                            stim_flashing = False
+                            collect_phase = None
+                            current_target = None
+                            print("[PsychoPy] 刺激停止")
+
+                        elif t == "stim_collect_phase":
+                            phase = data.get("phase")
+                            collect_phase = phase
+                            if phase == 'stimulus':
+                                stim_flashing = True
+                                stim_start_time = time.time()
+                            else:
+                                stim_flashing = False
+                            print(f"[PsychoPy] 采集阶段: {phase}")
+
+                        elif t == "stim_target":
+                            current_target = data.get("direction")
+                            print(f"[PsychoPy] 目标方向: {current_target}")
+
+                    except Exception as e:
+                        print(f"[PsychoPy] 消息处理错误: {e}")
+        except Exception as e:
+            print(f"[PsychoPy] WebSocket 连接断开: {e}, 2秒后重连...")
+            await asyncio.sleep(2)
+
+
+def main():
+    print("=" * 50)
+    print("PsychoPy SSVEP 刺激窗口")
+    print(f"频率: {STIM_FREQS} Hz")
+    print(f"刷新率: {FPS} Hz")
+    print(f"WebSocket: {WS_URL}")
+    print("=" * 50)
+
+    win = create_window()
+    blocks = create_blocks(win)
+    print(f"窗口: {win.size[0]}×{win.size[1]} px, 块: {blocks[0]['size']}px")
+
+    # WebSocket 在后台线程运行
+    loop = asyncio.new_event_loop()
+
+    def run_ws():
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(ws_client())
+
+    ws_thread = threading.Thread(target=run_ws, daemon=True)
+    ws_thread.start()
+
+    # 主线程运行 PsychoPy 渲染循环
+    render_loop(win, blocks)
+
+
+if __name__ == "__main__":
+    main()

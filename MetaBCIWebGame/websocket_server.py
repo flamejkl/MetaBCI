@@ -168,6 +168,7 @@ class WebSocketServer:
         self.host = WS_HOST
         self.port = WS_PORT
         self.clients = set()
+        self.stim_clients = set()       # PsychoPy 刺激窗口客户端
         self.server = None
         self.loop = None
         self.thread = None
@@ -290,9 +291,16 @@ class WebSocketServer:
                     msg_type = data.get("type")
                     log(f"[HANDLER] 收到消息类型: {msg_type}")
 
+                    # ---------- PsychoPy 刺激窗口注册 ----------
+                    if msg_type == "stim_register":
+                        self.stim_clients.add(websocket)
+                        log("[HANDLER] PsychoPy 刺激窗口已注册")
+                        continue
+
                     # ---------- 停止命令 ----------
                     if msg_type in ("stop_demo", "stop_eval", "stop_realtime"):
                         await self._stop_all()
+                        await self._broadcast_stim({"type": "stim_stop"})
                         await websocket.send(json.dumps({"type": "status", "status": "stopped"}))
                         continue
 
@@ -408,6 +416,7 @@ class WebSocketServer:
                         self.engine.set_mode(ContinuousStreamingEngine.State.EVAL)
                         await self.engine.start()
                         await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
+                        await self._broadcast_stim({"type": "stim_start"})
                         continue
 
                     # ---------- 浏览器数据采集 ----------
@@ -523,15 +532,27 @@ class WebSocketServer:
             return
         msg = json.dumps(message) if not isinstance(message, str) else message
         stale = []
-        # Iterate over a snapshot to avoid "set changed size during iteration"
         for client in list(self.clients):
             try:
                 await client.send(msg)
             except Exception:
                 stale.append(client)
-        # Clean up disconnected clients
         for client in stale:
             self.clients.discard(client)
+
+    async def _broadcast_stim(self, data):
+        """向 PsychoPy 刺激窗口广播消息。"""
+        if not self.stim_clients:
+            return
+        msg = json.dumps(data)
+        stale = []
+        for client in list(self.stim_clients):
+            try:
+                await client.send(msg)
+            except Exception:
+                stale.append(client)
+        for client in stale:
+            self.stim_clients.discard(client)
 
     # ========== 服务器生命周期 ==========
     async def _start_server(self):
