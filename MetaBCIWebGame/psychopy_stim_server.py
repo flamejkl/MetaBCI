@@ -16,8 +16,8 @@ STIM_FREQS = [8.25, 11.0, 13.75, 16.5]
 PHASES = [0.0, 0.5, 1.0, 1.5]           # up, down, left, right (π 为单位)
 DIRS = ['up', 'down', 'left', 'right']
 FPS = 165.0                              # 显示器刷新率
-BLOCK_RATIO = 0.12                       # 块宽度 = 12% 屏宽
-GAP_RATIO = 0.10                         # 间距 = 10% 屏宽
+BLOCK_RATIO = 0.12                       # 块视觉宽度 = 12% 屏宽 (stim_length)
+POS_RATIO = 0.15                          # 块中心间距 = 15% 屏宽 (block_ratio)
 WS_URL = "ws://localhost:8765"
 WINDOW_HEIGHT_RATIO = 0.25               # 窗口占屏幕下方 25%
 
@@ -71,14 +71,14 @@ def create_window():
 def create_blocks(win):
     """创建 4 个闪烁刺激块，布局与 run_ssvep_experiment.py 一致。"""
     sw, sh = win.size
-    bw = int(sw * BLOCK_RATIO)
-    gap = int(sw * GAP_RATIO)
-    total_w = 4 * bw + 3 * gap
-    start_x = -total_w / 2 + bw / 2
+    bw = int(sw * BLOCK_RATIO)           # 视觉块大小 = 12%
+    spacing = int(sw * POS_RATIO)         # 中心间距 = 15% (匹配实验)
+    total_w = 4 * spacing                # 4个块的中心间距
+    start_x = -total_w / 2 + spacing / 2
 
     blocks = []
     for i, (freq, phase, label) in enumerate(zip(STIM_FREQS, PHASES, DIRS)):
-        x = start_x + i * (bw + gap)
+        x = start_x + i * spacing
         y = 0  # 垂直居中
         rect = visual.Rect(
             win, width=bw, height=bw,

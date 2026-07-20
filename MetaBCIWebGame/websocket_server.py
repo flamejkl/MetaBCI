@@ -373,10 +373,9 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
                             continue
 
-                        # ---- PsychoPy 已连接 → 发送目标方向 + 等待提示完成 ----
+                        # ---- PsychoPy 已连接 → 发送目标方向（提示由渲染循环自动完成） ----
                         if self.stim_clients:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
-                            await asyncio.sleep(0.8)  # 等待用户注视目标方向
 
                         self.engine.request_reset()
                         if hasattr(self, '_skip_stale') and self._skip_stale:
