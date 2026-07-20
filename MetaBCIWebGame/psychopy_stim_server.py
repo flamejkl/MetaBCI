@@ -161,7 +161,7 @@ def render_loop(win, blocks):
     trial_start = 0.0
 
     while True:
-        t = clock.getTime()
+        t = time.perf_counter()  # 与 ws_client 的 cue_deadline 保持同一时钟
 
         if cue_deadline > 0 and t > cue_deadline:
             cue_deadline = 0.0
@@ -213,7 +213,7 @@ async def ws_client():
 
                         if t == "stim_start":
                             stim_flashing = True
-                            stim_start_time = time.time()
+                            stim_start_time = time.perf_counter()
                             print("[PsychoPy] 刺激开始")
 
                         elif t == "stim_stop":
@@ -227,7 +227,7 @@ async def ws_client():
                             collect_phase = phase
                             if phase == 'stimulus':
                                 stim_flashing = True
-                                stim_start_time = time.time()
+                                stim_start_time = time.perf_counter()
                             else:
                                 stim_flashing = False
                             print(f"[PsychoPy] 阶段: {phase}")
@@ -235,7 +235,7 @@ async def ws_client():
                         elif t == "stim_target":
                             current_target = data.get("direction")
                             # 短暂高亮 0.8s 提示用户注视目标方向
-                            cue_deadline = time.time() + 0.8
+                            cue_deadline = time.perf_counter() + 0.8
                             print(f"[PsychoPy] 目标: {current_target} (cue 0.8s)")
 
                     except Exception as e:
