@@ -410,6 +410,67 @@ class WebSocketServer:
                         await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
                         continue
 
+                    # ---------- 浏览器数据采集 ----------
+                    if msg_type == "start_collect":
+                        log("[HANDLER] 收到 start_collect")
+                        if self.mode != "online":
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "请先切换到在线模式"}))
+                            continue
+                        await self._stop_all()
+                        if not self._connect_acq():
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "EEG设备未连接"}))
+                            continue
+                        # 创建保存目录
+                        import datetime as _dt
+                        ts = _dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+                        self._collect_root = os.path.join(BASE_DIR, "data_self_browser", ts)
+                        for lbl in range(4):
+                            os.makedirs(os.path.join(self._collect_root, str(lbl + 1)), exist_ok=True)
+                        self._collect_counter = {0: 0, 1: 0, 2: 0, 3: 0}
+                        self._collect_active = True
+                        log(f"[COLLECT] 数据采集已启动，保存到 {self._collect_root}")
+                        await websocket.send(json.dumps({"type": "collect_started", "status": "ready"}))
+                        continue
+
+                    if msg_type == "collect_step":
+                        if not getattr(self, '_collect_active', False):
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "采集未启动"}))
+                            continue
+                        expected_dir = data.get("direction")
+                        if expected_dir not in ["up", "down", "left", "right"]:
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "无效方向"}))
+                            continue
+                        label = {"up": 0, "down": 1, "left": 2, "right": 3}[expected_dir]
+                        # 记录起点并等待2秒采集
+                        start = self.acq.get_sample_count()
+                        log(f"[COLLECT] 试次开始: {expected_dir}, buffer起点={start}")
+                        await asyncio.sleep(2.0)
+                        # 提取500个采样点（2秒×250Hz）
+                        end = self.acq.get_sample_count()
+                        if end - start < 500:
+                            log(f"[COLLECT] 数据不足: start={start} end={end}")
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "数据不足"}))
+                            continue
+                        # 取14个目标通道，从start开始的500点
+                        with self.acq._lock:
+                            raw = np.array(self.acq.eeg_buffer[start:start + 500], dtype=np.float64).T
+                        idx = self._collect_counter[label]
+                        fname = os.path.join(self._collect_root, str(label + 1), f"browser_trial_{idx:04d}.npy")
+                        np.save(fname, raw)
+                        self._collect_counter[label] += 1
+                        log(f"[COLLECT] 已保存: {expected_dir} #{idx} → {fname}  shape={raw.shape}")
+                        await websocket.send(json.dumps({"type": "collect_done", "direction": expected_dir, "index": idx}))
+                        continue
+
+                    if msg_type == "stop_collect":
+                        log("[HANDLER] 收到 stop_collect")
+                        self._collect_active = False
+                        total = sum(self._collect_counter.values())
+                        log(f"[COLLECT] 采集结束，共 {total} 试次: {dict(self._collect_counter)}")
+                        await self._stop_all()
+                        await websocket.send(json.dumps({"type": "collect_stopped", "total": total}))
+                        continue
+
                     # ---------- 实时脑控启动 ----------
                     if msg_type == "start_realtime":
                         log("[HANDLER] 收到 start_realtime")

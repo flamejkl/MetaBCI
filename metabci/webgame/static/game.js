@@ -2302,6 +2302,91 @@
     }
 
     // ==================== 统一移动入口 ====================
+    // ==================== 浏览器数据采集 ====================
+    let collectMode = false, collectReady = false, collectResolve = null;
+    let collectIndex = 0, collectSequence = [];
+    const COLLECT_N_PER_DIR = 10;  // 每个方向10个试次，共40个
+
+    async function startCollectMode() {
+        if (collectMode) return;
+        if (currentMode !== 'online') { alert('请先切换到在线模式'); return; }
+        if (!ws || ws.readyState !== WebSocket.OPEN) { alert('WebSocket 未连接'); return; }
+
+        collectMode = true;
+        collectReady = false;
+        collectIndex = 0;
+        document.getElementById('btn-collect-start').disabled = true;
+        document.getElementById('btn-collect-stop').disabled = false;
+        const infoEl = document.getElementById('collect-info');
+        if (infoEl) { infoEl.style.display = 'block'; infoEl.innerHTML = '正在启动采集...'; }
+
+        // 启动采集
+        ws.send(JSON.stringify({ type: "start_collect" }));
+        try {
+            await new Promise((resolve, reject) => {
+                collectResolve = resolve;
+                setTimeout(() => { if (!collectReady) { collectResolve = null; reject(new Error('start_collect 超时')); } }, 10000);
+            });
+        } catch (e) { alert('启动采集失败: ' + e.message); stopCollectMode(); return; }
+
+        // 生成采集序列: 每方向N次
+        collectSequence = [];
+        for (let d = 0; d < 4; d++) {
+            for (let i = 0; i < COLLECT_N_PER_DIR; i++) collectSequence.push(d);
+        }
+        // 随机打乱
+        for (let i = collectSequence.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [collectSequence[i], collectSequence[j]] = [collectSequence[j], collectSequence[i]];
+        }
+        collectIndex = 0;
+        if (infoEl) infoEl.innerHTML = `采集就绪，共 ${collectSequence.length} 试次`;
+
+        // 开始刺激闪烁
+        if (!stimFlashing) startStimuli();
+        setTimeout(() => { if (collectMode) runCollectTrial(); }, 500);
+    }
+
+    function stopCollectMode() {
+        collectMode = false;
+        collectReady = false;
+        collectResolve = null;
+        document.getElementById('btn-collect-start').disabled = false;
+        document.getElementById('btn-collect-stop').disabled = true;
+        const infoEl = document.getElementById('collect-info');
+        if (infoEl) { infoEl.style.display = 'none'; }
+        if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "stop_collect" }));
+    }
+
+    function runCollectTrial() {
+        if (!collectMode || collectIndex >= collectSequence.length) {
+            if (collectIndex >= collectSequence.length && collectMode) {
+                const infoEl = document.getElementById('collect-info');
+                if (infoEl) infoEl.innerHTML = `✅ 采集完成！共 ${collectSequence.length} 试次`;
+                setTimeout(() => stopCollectMode(), 2000);
+            }
+            return;
+        }
+
+        const dirIdx = collectSequence[collectIndex];
+        const dirs = ['up', 'down', 'left', 'right'];
+        const dir = dirs[dirIdx];
+        const infoEl = document.getElementById('collect-info');
+        if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👀 请注视 <b>${dir}</b> (${COLLECT_N_PER_DIR - Math.floor(collectIndex/4)}/${COLLECT_N_PER_DIR})`;
+
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "collect_step", direction: dir }));
+            console.log(`[采集] 发送 ${dir} (${collectIndex+1}/${collectSequence.length})`);
+        }
+    }
+
+    function handleCollectDone(data) {
+        if (!collectMode) return;
+        collectIndex++;
+        // 短暂休息后下一试次
+        setTimeout(() => { if (collectMode) runCollectTrial(); }, 500);
+    }
+
     function handleLocalMove(cmd, fromWebSocket = false) {
         if (evalMode && !fromWebSocket) return;
         if (activeGame) {
@@ -2359,6 +2444,17 @@
                     }
                 } else if (data.type === "eval_started") {
                     console.log('[前端] 后端已进入评测模式');
+                } else if (data.type === "collect_started") {
+                    console.log('[前端] 数据采集已启动');
+                    collectReady = true;
+                    if (collectResolve) collectResolve();
+                } else if (data.type === "collect_done") {
+                    console.log('[前端] 采集完成:', data.direction, data.index);
+                    handleCollectDone(data);
+                } else if (data.type === "collect_error") {
+                    console.error('[前端] 采集错误:', data.message);
+                } else if (data.type === "collect_stopped") {
+                    console.log('[前端] 采集停止, 总计:', data.total);
                 } else if (data.type === "trigger_ack") {
                     console.log('[Trigger] 已发送:', data.code);
                 } else if (data.type === "offline_status" || data.type === "realtime_status") {
@@ -2494,6 +2590,11 @@
 
         const evalStopBtn = document.getElementById('btn-eval-stop');
         if (evalStopBtn) evalStopBtn.addEventListener('click', stopEvalMode);
+
+        const collectStartBtn = document.getElementById('btn-collect-start');
+        if (collectStartBtn) collectStartBtn.addEventListener('click', startCollectMode);
+        const collectStopBtn = document.getElementById('btn-collect-stop');
+        if (collectStopBtn) collectStopBtn.addEventListener('click', stopCollectMode);
 
         ['demo-log', 'demo-summary', 'demo-progress'].forEach(id => {
             const el = document.getElementById(id);
