@@ -2351,12 +2351,20 @@
         collectMode = false;
         collectReady = false;
         collectResolve = null;
+        collectPhase = 'preview';
         document.getElementById('btn-collect-start').disabled = false;
         document.getElementById('btn-collect-stop').disabled = true;
         const infoEl = document.getElementById('collect-info');
         if (infoEl) { infoEl.style.display = 'none'; }
         if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "stop_collect" }));
+        // 恢复正常刺激闪烁
+        stimFlashing = false;
+        drawStimuli(performance.now());
     }
+
+    // 采集流程状态: 'preview' | 'index' | 'rest' | 'stimulus'
+    let collectPhase = 'preview';
+    let collectTargetDir = null;
 
     function runCollectTrial() {
         if (!collectMode || collectIndex >= collectSequence.length) {
@@ -2370,14 +2378,75 @@
 
         const dirIdx = collectSequence[collectIndex];
         const dirs = ['up', 'down', 'left', 'right'];
-        const dir = dirs[dirIdx];
+        collectTargetDir = dirs[dirIdx];
         const infoEl = document.getElementById('collect-info');
-        if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👀 请注视 <b>${dir}</b> (${COLLECT_N_PER_DIR - Math.floor(collectIndex/4)}/${COLLECT_N_PER_DIR})`;
 
-        if (ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "collect_step", direction: dir }));
-            console.log(`[采集] 发送 ${dir} (${collectIndex+1}/${collectSequence.length})`);
+        // ---- 阶段1: 预览 (所有块常亮 1s) ----
+        collectPhase = 'preview';
+        if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 🔍 预览中...`;
+        if (!stimFlashing) startStimuli();
+        stimFlashing = false;  // 暂时停止闪烁，所有块显示灰色
+        drawStimuli(performance.now());
+
+        setTimeout(() => {
+            if (!collectMode) return;
+            // ---- 阶段2: 提示目标方向 (目标块高亮 1s) ----
+            collectPhase = 'index';
+            if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👉 目标: ${collectTargetDir}`;
+            // 所有块灰色，目标块亮白
+            drawIndexFrame(collectTargetDir);
+
+            setTimeout(() => {
+                if (!collectMode) return;
+                // ---- 阶段3: 休息 (十字准星 0.5s) ----
+                collectPhase = 'rest';
+                if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ✚ 休息`;
+                drawRestFrame();
+
+                setTimeout(() => {
+                    if (!collectMode) return;
+                    // ---- 阶段4: 闪烁采集 (2s) ----
+                    collectPhase = 'stimulus';
+                    if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ⚡ 采集: ${collectTargetDir}`;
+                    stimFlashing = true;
+                    stimStartTime = performance.now();
+                    lastStimFrameTime = stimStartTime;
+                    // 发送采集指令
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: "collect_step", direction: collectTargetDir }));
+                    }
+                }, 500);  // 休息0.5s
+            }, 1000);  // 提示1s
+        }, 1000);  // 预览1s
+    }
+
+    function drawIndexFrame(targetDir) {
+        stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
+        for (const dir of dirKeys) {
+            const pos = positions[dir];
+            if (!pos) continue;
+            const gray = (dir === targetDir) ? 255 : 80;
+            stimCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
+            stimCtx.fillRect(pos.x - pos.w/2, pos.y - pos.h/2, pos.w, pos.h);
+            stimCtx.fillStyle = (gray > 128) ? '#000' : '#fff';
+            const fs = (document.fullscreenElement) ? Math.round(pos.w * 0.35) : 28;
+            stimCtx.font = `${fs}px Arial`;
+            stimCtx.textAlign = 'center';
+            stimCtx.textBaseline = 'middle';
+            stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
         }
+    }
+
+    function drawRestFrame() {
+        stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
+        const cx = stimCanvas.width / 2, cy = stimCanvas.height / 2;
+        const len = Math.min(stimCanvas.width, stimCanvas.height) * 0.08;
+        stimCtx.strokeStyle = '#888';
+        stimCtx.lineWidth = 3;
+        stimCtx.beginPath();
+        stimCtx.moveTo(cx - len, cy); stimCtx.lineTo(cx + len, cy);
+        stimCtx.moveTo(cx, cy - len); stimCtx.lineTo(cx, cy + len);
+        stimCtx.stroke();
     }
 
     function handleCollectDone(data) {
