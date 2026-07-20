@@ -441,14 +441,20 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "collect_error", "message": "无效方向"}))
                             continue
                         label = {"up": 0, "down": 1, "left": 2, "right": 3}[expected_dir]
-                        # 记录起点并等待2秒采集
+                        # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
                         start = self.acq.get_sample_count()
                         log(f"[COLLECT] 试次开始: {expected_dir}, buffer起点={start}")
-                        await asyncio.sleep(2.0)
-                        # 提取500个采样点（2秒×250Hz）
-                        end = self.acq.get_sample_count()
+                        import time as _time
+                        deadline = _time.time() + 2.5  # 最多等2.5秒
+                        while True:
+                            await asyncio.sleep(0.05)
+                            end = self.acq.get_sample_count()
+                            if end - start >= 500:
+                                break
+                            if _time.time() > deadline:
+                                break
                         if end - start < 500:
-                            log(f"[COLLECT] 数据不足: start={start} end={end}")
+                            log(f"[COLLECT] 数据不足: start={start} end={end} diff={end-start}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据不足"}))
                             continue
                         # 取14个目标通道，从start开始的500点
