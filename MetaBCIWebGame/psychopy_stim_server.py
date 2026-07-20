@@ -30,19 +30,15 @@ cue_deadline = 0.0                      # 提示高亮截至时间（秒）
 
 
 def create_window():
-    """创建 PsychoPy 底部小窗口 — 与游戏在线界面一致。"""
+    """创建全屏 PsychoPy 窗口 — 与离线实验 run_ssvep_experiment.py 完全一致。"""
     from psychopy import monitors as mon
-    WINDOW_HEIGHT_RATIO = 0.25
     m = mon.Monitor('stimMonitor', width=53, distance=60, verbose=False)
     m.setSizePix([1920, 1080])
-    scr_width, scr_height = m.getSizePix()
-    win_height = int(scr_height * WINDOW_HEIGHT_RATIO)
     win = visual.Window(
         monitor=m,
-        size=[scr_width, win_height],
-        pos=[0, scr_height - win_height],
+        size=[1920, 1080],
         color=(-1, -1, -1), colorSpace='rgb',
-        fullscr=False,
+        fullscr=True,
         screen=0,
         units='pix',
         winType='pyglet',
