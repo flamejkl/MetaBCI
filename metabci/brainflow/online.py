@@ -223,6 +223,12 @@ class ContinuousStreamingEngine:
         self.decoder.reset()
         self._executor.shutdown(wait=False)
 
+    async def safe_reset_decoder(self):
+        """线程安全重置解码器 — 等待工作线程完成当前批次后再重置。"""
+        while self._pending_future is not None:
+            await asyncio.sleep(0.002)
+        self.decoder.reset()
+
     def set_mode(self, state: str, expected_dir=None, msg_type=None):
         self.state = state
         self.context["expected_dir"] = expected_dir

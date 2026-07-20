@@ -334,7 +334,7 @@ class WebSocketServer:
                             expected_dir = data.get("direction")
                             label = {"up":0, "down":1, "left":2, "right":3}[expected_dir]
                             self._demo_gen = self.offline_gen.get_full_trial_generator_by_label(label)
-                            self.engine.decoder.reset()
+                            await self.engine.safe_reset_decoder()
                             self.engine.context["expected_dir"] = expected_dir
                             self.engine.context["msg_type"] = "demo_result"
                             log(f"[HANDLER] 设置 DEMO 期望: {expected_dir} (demo_step)")
@@ -357,7 +357,7 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
                             continue
 
-                        self.engine.decoder.reset()
+                        await self.engine.safe_reset_decoder()
                         self.engine.context["expected_dir"] = expected_dir
                         # 根据状态决定 msg_type
                         if self.engine.state == ContinuousStreamingEngine.State.DEMO:
