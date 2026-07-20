@@ -141,7 +141,15 @@ def _make_next_acq_sample(acq):
         if len(data) >= 25:  # 避免刷屏，只有批量才打印
             print(f"[Acq] 批次 {len(data)} 采样点 → 解码器", flush=True)
         return data, False, {}
-    return _next
+
+    def _skip_stale():
+        """跳到eeg_buffer末尾，丢弃旧数据（与decoder.reset()配套使用）。"""
+        if acq is None:
+            return
+        with acq._lock:
+            read_cursor[0] = len(acq.eeg_buffer)
+
+    return _next, _skip_stale
 
 
 # =========================== WebSocket 服务器主类 ===========================
@@ -335,6 +343,8 @@ class WebSocketServer:
                             label = {"up":0, "down":1, "left":2, "right":3}[expected_dir]
                             self._demo_gen = self.offline_gen.get_full_trial_generator_by_label(label)
                             self.engine.request_reset()
+                            if hasattr(self, '_skip_stale') and self._skip_stale:
+                                self._skip_stale()
                             self.engine.context["expected_dir"] = expected_dir
                             self.engine.context["msg_type"] = "demo_result"
                             log(f"[HANDLER] 设置 DEMO 期望: {expected_dir} (demo_step)")
@@ -358,6 +368,9 @@ class WebSocketServer:
                             continue
 
                         self.engine.request_reset()
+                        # 丢弃eeg_buffer中reset前积累的旧数据
+                        if hasattr(self, '_skip_stale') and self._skip_stale:
+                            self._skip_stale()
                         self.engine.context["expected_dir"] = expected_dir
                         # 根据状态决定 msg_type
                         if self.engine.state == ContinuousStreamingEngine.State.DEMO:
@@ -391,7 +404,9 @@ class WebSocketServer:
                             continue
 
                         # 使用内置回调
-                        self.engine.data_source_callback = _make_next_acq_sample(self.acq)
+                        next_fn, skip_stale = _make_next_acq_sample(self.acq)
+                        self._skip_stale = skip_stale
+                        self.engine.data_source_callback = next_fn
                         self.engine.set_mode(ContinuousStreamingEngine.State.EVAL)
                         await self.engine.start()
                         await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
@@ -413,7 +428,9 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "EEG设备未连接"}))
                             continue
 
-                        self.engine.data_source_callback = _make_next_acq_sample(self.acq)
+                        next_fn, skip_stale = _make_next_acq_sample(self.acq)
+                        self._skip_stale = skip_stale
+                        self.engine.data_source_callback = next_fn
                         self.engine.set_mode(ContinuousStreamingEngine.State.REALTIME)
                         await self.engine.start()
                         await websocket.send(json.dumps({"type": "realtime_status", "status": "started"}))
