@@ -26,6 +26,7 @@ stim_flashing = False
 stim_start_time = 0.0
 current_target = None
 collect_phase = None                    # 'preview'|'index'|'rest'|'stimulus'
+cue_deadline = 0.0                      # 提示高亮截至时间（秒）
 
 
 def create_window():
@@ -162,17 +163,23 @@ def render_loop(win, blocks):
     while True:
         t = clock.getTime()
 
+        # 短暂提示高亮 → 自动回到闪烁
+        if cue_deadline > 0 and t > cue_deadline:
+            cue_deadline = 0.0
+
         if collect_phase == 'preview':
             draw_preview(win, blocks)
         elif collect_phase == 'index' and current_target:
             draw_index(win, blocks, current_target)
         elif collect_phase == 'rest':
             draw_rest(win, blocks)
+        elif cue_deadline > 0 and current_target:
+            # 收到 stim_target: 短暂高亮目标块提示注视方向
+            draw_index(win, blocks, current_target)
         elif stim_flashing or collect_phase == 'stimulus':
             elapsed = t - stim_start_time
             draw_flash(win, blocks, elapsed)
         else:
-            # 默认空闲：灰色常亮
             for b in blocks:
                 b['rect'].fillColor = [0.5, 0.5, 0.5]
                 b['rect'].draw()
@@ -228,7 +235,9 @@ async def ws_client():
 
                         elif t == "stim_target":
                             current_target = data.get("direction")
-                            print(f"[PsychoPy] 目标: {current_target}")
+                            # 短暂高亮 0.8s 提示用户注视目标方向
+                            cue_deadline = time.time() + 0.8
+                            print(f"[PsychoPy] 目标: {current_target} (cue 0.8s)")
 
                     except Exception as e:
                         print(f"[PsychoPy] 消息处理错误: {e}")
