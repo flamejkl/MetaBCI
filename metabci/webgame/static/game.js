@@ -104,19 +104,21 @@
         const cw = stimCanvas.width;
         const ch = stimCanvas.height;
 
-        let bw, bh, gap;
         if (isFs) {
-            // 匹配离线实验比例: block=15vw, gap=10vw
-            bw = Math.round(STIM_RATIO.block * window.innerWidth);
-            gap = Math.round(STIM_RATIO.gap * window.innerWidth);
-            bh = Math.min(bw, ch - 8);   // 正方形，不超过 canvas 高度
-            bw = Math.min(bw, bh);
-        } else {
-            bw = STIM_CONFIG.blockWidth;
-            bh = STIM_CONFIG.blockHeight;
-            gap = STIM_CONFIG.gap;
+            // 全屏：四角布局，块大小 = min(12vw, canvas短边/5)
+            const bw = Math.round(Math.min(window.innerWidth * 0.12, Math.min(cw, ch) / 5));
+            const margin = Math.round(bw * 0.6);
+            const pos = {};
+            pos['up']    = { x: margin + bw/2, y: margin + bw/2, w: bw, h: bw };
+            pos['right'] = { x: cw - margin - bw/2, y: margin + bw/2, w: bw, h: bw };
+            pos['down']  = { x: cw - margin - bw/2, y: ch - margin - bw/2, w: bw, h: bw };
+            pos['left']  = { x: margin + bw/2, y: ch - margin - bw/2, w: bw, h: bw };
+            return pos;
         }
-
+        // 普通模式：底部横排
+        const bw = STIM_CONFIG.blockWidth;
+        const bh = STIM_CONFIG.blockHeight;
+        const gap = STIM_CONFIG.gap;
         const totalW = bw * 4 + gap * 3;
         const startX = (cw - totalW) / 2;
         const baseY = (ch - bh) / 2;
@@ -133,19 +135,22 @@
 
     // ==================== 刺激绘制核心 ====================
     function drawStimuli(now) {
+        const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
         stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
 
         const isFlashing = stimFlashing && stimStartTime !== null;
         const t = isFlashing ? (now - stimStartTime) / 1000 : 0;
 
+        // 全屏叠加模式：半透明，不遮挡游戏画面
+        if (isFs) stimCtx.globalAlpha = 0.55;
+
         for (const dir of dirKeys) {
             let gray;
             if (isFlashing) {
-                // 正弦波调制 — 与训练实验 stimtype='sinusoid' 完全一致
                 const freq = stimFreqs[dir];
                 const phase = stimPhases[dir] * Math.PI;
                 const val = Math.sin(2 * Math.PI * freq * t + phase);
-                gray = Math.floor(128 + 127 * val);   // 1~255 正弦灰度
+                gray = Math.floor(128 + 127 * val);
             } else {
                 gray = 128;
             }
@@ -157,12 +162,15 @@
             stimCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
             stimCtx.fillRect(x, y, pos.w, pos.h);
             stimCtx.fillStyle = (gray > 128) ? '#000' : '#fff';
-            stimCtx.font = '28px Arial';
+            const fs = isFs ? Math.round(pos.w * 0.35) : 28;
+            stimCtx.font = `${fs}px Arial`;
             stimCtx.textAlign = 'center';
             stimCtx.textBaseline = 'middle';
             const label = {up:'↑', down:'↓', left:'←', right:'→'}[dir];
             stimCtx.fillText(label, pos.x, pos.y);
         }
+
+        stimCtx.globalAlpha = 1.0;
 
         if (evalMode && evalTarget && showIndicator) {
             drawEvalIndicator(stimCtx, evalTarget);
@@ -316,15 +324,21 @@
     function updateStimLayout() {
         const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
         if (isFs) {
-            stimCanvas.width = window.innerWidth;
-            stimCanvas.height = Math.round(window.innerHeight * 0.26);
-            stimCanvas.style.width = '100vw';
-            stimCanvas.style.height = '26vh';
+            // 全屏：stimCanvas 叠加在游戏画布上，四角布局
+            const rect = gameCanvas.getBoundingClientRect();
+            stimCanvas.width = gameCanvas.width;
+            stimCanvas.height = gameCanvas.height;
+            stimCanvas.style.width = gameCanvas.style.width;
+            stimCanvas.style.height = gameCanvas.style.height;
+            stimCanvas.style.top = rect.top + 'px';
+            stimCanvas.style.left = rect.left + 'px';
         } else {
             stimCanvas.width = 800;
             stimCanvas.height = 180;
             stimCanvas.style.width = '800px';
             stimCanvas.style.height = '180px';
+            stimCanvas.style.top = 'auto';
+            stimCanvas.style.left = 'auto';
         }
         positions = initStimPositions();
         drawStimuli(performance.now());
@@ -332,22 +346,20 @@
 
     function resizeGameForFullscreen() {
         const headerH = 36;
-        const stimH = Math.round(window.innerHeight * 0.22);
-        const availH = window.innerHeight - headerH - stimH;
-        const availW = window.innerWidth;
-        // 正方形游戏画布，取最大内接正方形，留 5% 边距
+        const margin = 20;
+        const availH = window.innerHeight - headerH - margin * 2;
+        const availW = window.innerWidth - margin * 2;
+        // 正方形游戏画布（刺激块叠在画布四角，不占独立空间）
         const size = Math.floor(Math.min(availH * 0.92, availW * 0.90));
         gameCanvas.width = size;
         gameCanvas.height = size;
         gameCanvas.style.width = size + 'px';
         gameCanvas.style.height = size + 'px';
         gameCanvas.style.borderRadius = '8px';
-        // 重初始化游戏以适配新 canvas 尺寸
         if (activeGame) {
             activeGame.init();
             activeGame.render(gameCtx);
         }
-        // 更新全屏标题栏得分
         const fsScore = document.getElementById('fs-score');
         if (fsScore) {
             const scoreEl = document.getElementById('score');
