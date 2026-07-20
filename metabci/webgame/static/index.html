@@ -240,7 +240,35 @@
             box-shadow: 0 0 30px rgba(0,0,0,0.5);
         }
         body.fullscreen .maze-controls-container {
-            display: none;
+            display: flex !important;
+            flex-direction: column;
+            position: fixed;
+            top: 36px;
+            right: 2vw;
+            width: clamp(160px, 18vw, 240px);
+            bottom: 22vh;
+            flex-wrap: nowrap;
+            justify-content: center;
+            gap: 1.5vh;
+            background: rgba(255,255,255,0.03);
+            border-left: 1px solid #2a2a2a;
+            border-radius: 0;
+            padding: 2vw 1.5vw;
+            z-index: 50;
+        }
+        body.fullscreen .maze-controls-container label {
+            color: #aaa;
+            font-size: clamp(11px, 1.2vmin, 15px);
+        }
+        body.fullscreen .maze-controls-container input {
+            width: 100%;
+            font-size: clamp(12px, 1.4vmin, 17px);
+            padding: 0.6vh 0.5vw;
+        }
+        body.fullscreen .maze-controls-container button {
+            width: 100%;
+            font-size: clamp(12px, 1.4vmin, 17px);
+            padding: 0.8vh 1vw;
         }
         body.fullscreen footer {
             display: none;
