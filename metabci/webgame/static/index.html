@@ -206,7 +206,7 @@
             top: 36px;
             left: 0;
             right: 0;
-            bottom: 0;            /* 刺激块改为叠加层，不再占独立空间 */
+            bottom: 22vh;        /* 给刺激块留空间 */
             background: transparent;
             box-shadow: none;
             backdrop-filter: none;
@@ -274,16 +274,19 @@
             display: none;
         }
 
-        /* ---- 刺激块叠加层 (全屏时覆盖游戏画布) ---- */
+        /* ---- 底部刺激块 (fixed bottom) ---- */
         body.fullscreen #stimCanvas {
             position: fixed;
-            pointer-events: none;
-            z-index: 50;
+            bottom: 0;
+            left: 0;
+            width: 100vw;
+            height: 22vh;
             border: none;
             border-radius: 0;
-            box-shadow: none;
-            background: transparent;
-            /* top/left/width/height 由 JS 动态匹配游戏画布 */
+            box-shadow: 0 -2px 20px rgba(0,0,0,0.6);
+            pointer-events: none;
+            z-index: 90;
+            background: #0d0d0d;
         }
 
         /* ---- 浮动控制面板（vw/vh 自适应缩放）---- */
