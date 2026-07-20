@@ -96,6 +96,8 @@ class ContinuousStreamingEngine:
                         if data_chunk is not None:
                             if is_new_trial and self.state in (self.State.DEMO, self.State.EVAL):
                                 self.decoder.reset()
+                                if hasattr(self.decoder, 'reset_normaliser'):
+                                    self.decoder.reset_normaliser()
                                 self.current_extra = extra_info or {}
                             # Offload blocking decode to thread, keep event loop free
                             if self.state != self.State.IDLE:
