@@ -133,6 +133,14 @@
 
     // ==================== 刺激绘制核心 ====================
     function drawStimuli(now) {
+        // 采集模式非闪烁阶段：由专门函数绘制（不覆盖 index/rest 画面）
+        if (collectMode && collectPhase !== 'stimulus') {
+            if (collectPhase === 'preview') drawAllGray();
+            else if (collectPhase === 'index' && collectTargetDir) drawIndexFrame(collectTargetDir);
+            else if (collectPhase === 'rest') drawRestFrame();
+            return;
+        }
+
         stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
 
         const isFlashing = stimFlashing && stimStartTime !== null;
@@ -2384,24 +2392,21 @@
         // ---- 阶段1: 预览 (所有块常亮 1s) ----
         collectPhase = 'preview';
         if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 🔍 预览中...`;
-        if (!stimFlashing) startStimuli();
-        stimFlashing = false;  // 暂时停止闪烁，所有块显示灰色
-        drawStimuli(performance.now());
+        // rAF 循环会检测 collectPhase 并调用 drawAllGray()
 
         setTimeout(() => {
             if (!collectMode) return;
             // ---- 阶段2: 提示目标方向 (目标块高亮 1s) ----
             collectPhase = 'index';
             if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👉 目标: ${collectTargetDir}`;
-            // 所有块灰色，目标块亮白
-            drawIndexFrame(collectTargetDir);
+            // rAF 循环会检测 collectPhase 并调用 drawIndexFrame()
 
             setTimeout(() => {
                 if (!collectMode) return;
                 // ---- 阶段3: 休息 (十字准星 0.5s) ----
                 collectPhase = 'rest';
                 if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ✚ 休息`;
-                drawRestFrame();
+                // rAF 循环会检测 collectPhase 并调用 drawRestFrame()
 
                 setTimeout(() => {
                     if (!collectMode) return;
@@ -2411,6 +2416,7 @@
                     stimFlashing = true;
                     stimStartTime = performance.now();
                     lastStimFrameTime = stimStartTime;
+                    // rAF 循环检测到 collectPhase==='stimulus' 后恢复正常闪烁绘制
                     // 发送采集指令
                     if (ws && ws.readyState === WebSocket.OPEN) {
                         ws.send(JSON.stringify({ type: "collect_step", direction: collectTargetDir }));
@@ -2418,6 +2424,22 @@
                 }, 500);  // 休息0.5s
             }, 1000);  // 提示1s
         }, 1000);  // 预览1s
+    }
+
+    function drawAllGray() {
+        stimCtx.clearRect(0, 0, stimCanvas.width, stimCanvas.height);
+        for (const dir of dirKeys) {
+            const pos = positions[dir];
+            if (!pos) continue;
+            stimCtx.fillStyle = 'rgb(128, 128, 128)';
+            stimCtx.fillRect(pos.x - pos.w/2, pos.y - pos.h/2, pos.w, pos.h);
+            stimCtx.fillStyle = '#000';
+            const fs = (document.fullscreenElement) ? Math.round(pos.w * 0.35) : 28;
+            stimCtx.font = `${fs}px Arial`;
+            stimCtx.textAlign = 'center';
+            stimCtx.textBaseline = 'middle';
+            stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
+        }
     }
 
     function drawIndexFrame(targetDir) {
