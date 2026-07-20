@@ -138,6 +138,8 @@ def _make_next_acq_sample(acq):
         if not new:
             return None, False, {}
         data = np.array(new, dtype=np.float64)          # (n_new, n_channels)
+        if len(data) >= 25:  # 避免刷屏，只有批量才打印
+            print(f"[Acq] 批次 {len(data)} 采样点 → 解码器", flush=True)
         return data, False, {}
     return _next
 

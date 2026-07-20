@@ -752,7 +752,7 @@ class DataServerThread:
                 # ---------------------------------
 
                 tempBuf = np.array(tempBuf)
-                print(tempBuf.shape)
+                # print(tempBuf.shape)  # 调试用，正式运行时注释
                 if self.state == ConnectState.RUNNING:
                     # 把数据添加到RingBuffer
                     self.buffer.appendBuffer(tempBuf)
