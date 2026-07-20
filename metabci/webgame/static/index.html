@@ -205,8 +205,8 @@
             position: fixed;
             top: 36px;
             left: 0;
-            right: 200px;        /* 给侧边栏留空间 */
-            bottom: 26vh;        /* 给刺激块留空间 */
+            right: 0;
+            bottom: 22vh;        /* 给刺激块留空间 */
             background: transparent;
             box-shadow: none;
             backdrop-filter: none;
@@ -246,78 +246,13 @@
             display: none;
         }
 
-        /* ---- 右侧置信度侧边栏 (fixed right) ---- */
-        body.fullscreen #fs-conf-sidebar {
-            display: flex !important;
-            position: fixed;
-            top: 36px;
-            right: 0;
-            width: 200px;
-            bottom: 26vh;
-            flex-direction: column;
-            justify-content: center;
-            gap: 12px;
-            padding: 16px 14px;
-            background: rgba(255,255,255,0.03);
-            border-left: 1px solid #2a2a2a;
-            z-index: 50;
-        }
-        #fs-conf-sidebar {
-            display: none;
-        }
-        body.fullscreen #fs-conf-sidebar .fs-sb-title {
-            color: #888;
-            font-size: 11px;
-            text-align: center;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-        }
-        body.fullscreen .fs-sb-group {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-        }
-        body.fullscreen .fs-sb-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        body.fullscreen .fs-sb-dir {
-            color: #ccc;
-            font-weight: bold;
-            font-size: 15px;
-        }
-        body.fullscreen .fs-sb-pct {
-            color: #aaa;
-            font-family: monospace;
-            font-size: 13px;
-        }
-        body.fullscreen .fs-sb-track {
-            width: 100%;
-            height: 10px;
-            background: #1a1a1a;
-            border-radius: 5px;
-            overflow: hidden;
-        }
-        body.fullscreen .fs-sb-fill {
-            height: 100%;
-            width: 0%;
-            border-radius: 5px;
-            transition: width 0.15s ease;
-        }
-        body.fullscreen .fs-sb-fill.up    { background: #4fc3f7; }
-        body.fullscreen .fs-sb-fill.down  { background: #ffb74d; }
-        body.fullscreen .fs-sb-fill.left  { background: #81c784; }
-        body.fullscreen .fs-sb-fill.right { background: #e57373; }
-
         /* ---- 底部刺激块 (fixed bottom) ---- */
         body.fullscreen #stimCanvas {
             position: fixed;
             bottom: 0;
             left: 0;
             width: 100vw;
-            height: 26vh;
+            height: 22vh;
             border: none;
             border-radius: 0;
             box-shadow: 0 -2px 20px rgba(0,0,0,0.6);
@@ -326,21 +261,40 @@
             background: #0d0d0d;
         }
 
-        /* ---- 浮动控制面板 ---- */
+        /* ---- 浮动控制面板（vw/vh 自适应缩放）---- */
         body.fullscreen .control-panel {
             position: fixed;
             top: 44px;
-            left: 8px;
+            left: 1vw;
             z-index: 2000;
             width: auto;
-            max-width: 240px;
-            font-size: 0.75rem;
-            padding: 8px 10px;
-            gap: 3px;
-            border-radius: 10px;
-            background: rgba(20,20,20,0.9);
-            opacity: 0.7;
+            max-width: 22vw;
+            font-size: clamp(11px, 1.4vmin, 18px);
+            padding: 1vw 1.2vw;
+            gap: 0.4vw;
+            border-radius: 1vw;
+            background: rgba(20,20,20,0.92);
+            opacity: 0.75;
             transition: opacity 0.3s;
+        }
+        body.fullscreen .control-panel button {
+            font-size: clamp(11px, 1.3vmin, 16px);
+            padding: 0.5vh 1vw;
+        }
+        body.fullscreen .confidence-panel h3 {
+            font-size: clamp(12px, 1.6vmin, 20px);
+            margin-bottom: 0.5vh;
+        }
+        body.fullscreen .bar-item .dir {
+            font-size: clamp(14px, 2vmin, 26px);
+            width: clamp(24px, 3vmin, 40px);
+        }
+        body.fullscreen .bar-container {
+            height: clamp(14px, 2vmin, 24px);
+        }
+        body.fullscreen .bar-item span:last-child {
+            font-size: clamp(10px, 1.3vmin, 16px);
+            width: clamp(32px, 4vmin, 50px);
         }
         body.fullscreen .control-panel:hover {
             opacity: 1;
@@ -452,26 +406,6 @@
         </div>
     </div>
 
-    <!-- 全屏右侧置信度侧边栏 -->
-    <div id="fs-conf-sidebar">
-        <div class="fs-sb-title">实时置信度</div>
-        <div class="fs-sb-group">
-            <div class="fs-sb-header"><span class="fs-sb-dir">↑ 上</span><span id="fs-sb-pct-up" class="fs-sb-pct">0%</span></div>
-            <div class="fs-sb-track"><div id="fs-sb-bar-up" class="fs-sb-fill up" style="width:0%"></div></div>
-        </div>
-        <div class="fs-sb-group">
-            <div class="fs-sb-header"><span class="fs-sb-dir">↓ 下</span><span id="fs-sb-pct-down" class="fs-sb-pct">0%</span></div>
-            <div class="fs-sb-track"><div id="fs-sb-bar-down" class="fs-sb-fill down" style="width:0%"></div></div>
-        </div>
-        <div class="fs-sb-group">
-            <div class="fs-sb-header"><span class="fs-sb-dir">← 左</span><span id="fs-sb-pct-left" class="fs-sb-pct">0%</span></div>
-            <div class="fs-sb-track"><div id="fs-sb-bar-left" class="fs-sb-fill left" style="width:0%"></div></div>
-        </div>
-        <div class="fs-sb-group">
-            <div class="fs-sb-header"><span class="fs-sb-dir">→ 右</span><span id="fs-sb-pct-right" class="fs-sb-pct">0%</span></div>
-            <div class="fs-sb-track"><div id="fs-sb-bar-right" class="fs-sb-fill right" style="width:0%"></div></div>
-        </div>
-    </div>
 
     <script src="game.js"></script>
 </body>

@@ -286,20 +286,17 @@
 
     function applyFullscreenLayout(entering) {
         const fsHeader = document.querySelector('.fullscreen-header');
-        const fsSidebar = document.getElementById('fs-conf-sidebar');
         const btn = document.getElementById('btn-fullscreen');
         const btnFs = document.getElementById('btn-fullscreen-fs');
         if (entering) {
             document.body.classList.add('fullscreen');
             if (fsHeader) fsHeader.style.display = 'flex';
-            if (fsSidebar) fsSidebar.style.display = 'flex';
             if (btn) btn.style.display = 'none';
             if (btnFs) btnFs.style.display = '';
             resizeGameForFullscreen();
         } else {
             document.body.classList.remove('fullscreen');
             if (fsHeader) fsHeader.style.display = 'none';
-            if (fsSidebar) fsSidebar.style.display = 'none';
             if (btn) btn.style.display = '';
             if (btnFs) btnFs.style.display = 'none';
             gameCanvas.width = 800;
@@ -335,18 +332,17 @@
 
     function resizeGameForFullscreen() {
         const headerH = 36;
-        const stimH = Math.round(window.innerHeight * 0.26);
-        const sidebarW = 200;
+        const stimH = Math.round(window.innerHeight * 0.22);
         const availH = window.innerHeight - headerH - stimH;
-        const availW = window.innerWidth - sidebarW;
-        // 正方形游戏画布，留一些 padding
-        const size = Math.floor(Math.min(availH * 0.88, availW * 0.85));
+        const availW = window.innerWidth;
+        // 正方形游戏画布，取最大内接正方形，留 5% 边距
+        const size = Math.floor(Math.min(availH * 0.92, availW * 0.90));
         gameCanvas.width = size;
         gameCanvas.height = size;
         gameCanvas.style.width = size + 'px';
         gameCanvas.style.height = size + 'px';
         gameCanvas.style.borderRadius = '8px';
-        // 重初始化游戏以适配新 canvas 尺寸（迷宫 cell_size 等依赖 canvas 宽高）
+        // 重初始化游戏以适配新 canvas 尺寸
         if (activeGame) {
             activeGame.init();
             activeGame.render(gameCtx);
@@ -2424,14 +2420,6 @@
         for (let i = 0; i < dirs.length; i++) {
             const bar = document.getElementById(`bar-${dirs[i]}`);
             const text = document.getElementById(`conf-${dirs[i]}`);
-            const percent = Math.round(confidences[i] * 100);
-            if (bar) bar.style.width = percent + '%';
-            if (text) text.innerText = percent + '%';
-        }
-        // 全屏右侧置信度侧边栏
-        for (let i = 0; i < dirs.length; i++) {
-            const bar = document.getElementById(`fs-sb-bar-${dirs[i]}`);
-            const text = document.getElementById(`fs-sb-pct-${dirs[i]}`);
             const percent = Math.round(confidences[i] * 100);
             if (bar) bar.style.width = percent + '%';
             if (text) text.innerText = percent + '%';
