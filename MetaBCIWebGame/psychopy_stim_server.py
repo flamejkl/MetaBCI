@@ -216,7 +216,7 @@ async def ws_client():
                             current_target = None
                             print("[PsychoPy] 刺激停止")
 
-                        elif t == "stim_collect_phase":
+                        elif t == "stim_phase":
                             phase = data.get("phase")
                             collect_phase = phase
                             if phase == 'stimulus':
@@ -224,11 +224,11 @@ async def ws_client():
                                 stim_start_time = time.time()
                             else:
                                 stim_flashing = False
-                            print(f"[PsychoPy] 采集阶段: {phase}")
+                            print(f"[PsychoPy] 阶段: {phase}")
 
                         elif t == "stim_target":
                             current_target = data.get("direction")
-                            print(f"[PsychoPy] 目标方向: {current_target}")
+                            print(f"[PsychoPy] 目标: {current_target}")
 
                     except Exception as e:
                         print(f"[PsychoPy] 消息处理错误: {e}")

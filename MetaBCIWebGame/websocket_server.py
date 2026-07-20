@@ -373,10 +373,26 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
                             continue
 
-                        self.engine.request_reset()
-                        # 丢弃eeg_buffer中reset前积累的旧数据
-                        if hasattr(self, '_skip_stale') and self._skip_stale:
-                            self._skip_stale()
+                        # ---- PsychoPy 刺激流程 ----
+                        if self.stim_clients:
+                            # 提示阶段 (1s)
+                            await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
+                            await asyncio.sleep(1.0)
+                            # 休息阶段 (0.5s)
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "rest"})
+                            await asyncio.sleep(0.5)
+                            # 闪烁采集阶段 — 此时重置解码器
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                            self.engine.request_reset()
+                            if hasattr(self, '_skip_stale') and self._skip_stale:
+                                self._skip_stale()
+                        else:
+                            # 原有流程：直接重置，使用浏览器刺激块
+                            self.engine.request_reset()
+                            if hasattr(self, '_skip_stale') and self._skip_stale:
+                                self._skip_stale()
+
                         self.engine.context["expected_dir"] = expected_dir
                         # 根据状态决定 msg_type
                         if self.engine.state == ContinuousStreamingEngine.State.DEMO:
@@ -450,6 +466,16 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "collect_error", "message": "无效方向"}))
                             continue
                         label = {"up": 0, "down": 1, "left": 2, "right": 3}[expected_dir]
+
+                        # ---- PsychoPy 刺激流程 ----
+                        if self.stim_clients:
+                            await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
+                            await asyncio.sleep(1.0)
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "rest"})
+                            await asyncio.sleep(0.5)
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+
                         # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
                         start = self.acq.get_sample_count()
                         log(f"[COLLECT] 试次开始: {expected_dir}, buffer起点={start}")
