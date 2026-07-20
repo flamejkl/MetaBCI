@@ -378,13 +378,18 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
                             await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
                             await asyncio.sleep(1.0)  # 提示阶段：用户转移视线
+                            # 以下三步必须在await之前（同步），确保引擎拿到的第一帧就是正确数据
+                            if hasattr(self, '_skip_stale') and self._skip_stale:
+                                self._skip_stale()           # 丢弃提示期无效数据
+                            self.engine.request_reset()      # 请求重置解码器
+                            self.engine.context["expected_dir"] = expected_dir
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                        else:
+                            self.engine.request_reset()
+                            if hasattr(self, '_skip_stale') and self._skip_stale:
+                                self._skip_stale()
+                            self.engine.context["expected_dir"] = expected_dir
 
-                        self.engine.request_reset()
-                        if hasattr(self, '_skip_stale') and self._skip_stale:
-                            self._skip_stale()
-
-                        self.engine.context["expected_dir"] = expected_dir
                         # 根据状态决定 msg_type
                         if self.engine.state == ContinuousStreamingEngine.State.DEMO:
                             self.engine.context["msg_type"] = "demo_result"
