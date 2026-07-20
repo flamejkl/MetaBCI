@@ -2425,7 +2425,8 @@
         for (const dir of dirKeys) {
             const pos = positions[dir];
             if (!pos) continue;
-            const gray = (dir === targetDir) ? 255 : 80;
+            const isTarget = (dir === targetDir);
+            const gray = isTarget ? 255 : 80;
             stimCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
             stimCtx.fillRect(pos.x - pos.w/2, pos.y - pos.h/2, pos.w, pos.h);
             stimCtx.fillStyle = (gray > 128) ? '#000' : '#fff';
@@ -2434,6 +2435,23 @@
             stimCtx.textAlign = 'center';
             stimCtx.textBaseline = 'middle';
             stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
+        }
+        // 目标块下方绘制红色三角指示标 ▼
+        const tpos = positions[targetDir];
+        if (tpos) {
+            const triH = Math.round(tpos.h * 0.25);
+            const triW = Math.round(tpos.w * 0.35);
+            const cx = tpos.x, cy = tpos.y + tpos.h / 2 + triH + 4;
+            stimCtx.fillStyle = '#ff0000';
+            stimCtx.shadowBlur = 10;
+            stimCtx.shadowColor = '#ff0000';
+            stimCtx.beginPath();
+            stimCtx.moveTo(cx, cy + triH / 2);
+            stimCtx.lineTo(cx - triW / 2, cy - triH / 2);
+            stimCtx.lineTo(cx + triW / 2, cy - triH / 2);
+            stimCtx.closePath();
+            stimCtx.fill();
+            stimCtx.shadowBlur = 0;
         }
     }
 
