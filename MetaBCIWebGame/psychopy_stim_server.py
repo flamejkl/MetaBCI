@@ -124,24 +124,26 @@ def draw_index(win, blocks, target_dir):
         b['rect'].draw()
         b['label'].color = [-1, -1, -1] if is_target else [1, 1, 1]
         b['label'].draw()
-    # 红色三角指示符 — 放在刺激块间隔中（与网页版对齐）
+    # 红色三角箭头 — 在目标块邻接间隙中，指向目标块
     b_up = next(b for b in blocks if b['dir'] == 'up')
     b_down = next(b for b in blocks if b['dir'] == 'down')
     b_left = next(b for b in blocks if b['dir'] == 'left')
     b_right = next(b for b in blocks if b['dir'] == 'right')
     tri_size = min(b_up['size'], b_up['size']) * 0.8
-    tri_y = b_up['y']  # 与刺激块同一水平线
-
-    if target_dir in ('up', 'down'):
-        tri_x = (b_up['x'] + b_up['size']/2 + b_down['x'] - b_down['size']/2) / 2
-        ori = 180.0 if target_dir == 'up' else 0.0
-    else:
-        tri_x = (b_left['x'] + b_left['size']/2 + b_right['x'] - b_right['size']/2) / 2
-        ori = 270.0 if target_dir == 'left' else 90.0
-
+    tri_y = b_up['y']
+    # 左间隙(↑↓之间)、右间隙(←→之间)，箭头指向目标
+    left_gap_x = (b_up['x'] + b_up['size']/2 + b_down['x'] - b_down['size']/2) / 2
+    right_gap_x = (b_left['x'] + b_left['size']/2 + b_right['x'] - b_right['size']/2) / 2
+    gap_map = {
+        'up':    (left_gap_x,  90.0),   # 左间隙，箭头指左(↑)
+        'down':  (left_gap_x,  270.0),  # 左间隙，箭头指右(↓)
+        'left':  (right_gap_x, 90.0),   # 右间隙，箭头指左(←)
+        'right': (right_gap_x, 270.0),  # 右间隙，箭头指右(→)
+    }
+    tri_x, ori = gap_map[target_dir]
     tri = visual.TextStim(
         win, text='⯆', font='Arial', bold=True,
-        color=[1, -1, -1], colorSpace='rgb',
+        color=(1.0, -1.0, -1.0), colorSpace='rgb',
         height=tri_size,
         pos=[tri_x, tri_y],
         ori=ori,
@@ -164,9 +166,9 @@ def draw_flash(win, blocks, elapsed):
     """闪烁阶段：正弦波调制（与训练实验完全一致）。"""
     for b in blocks:
         val = 0.5 + 0.5 * np.sin(2 * np.pi * b['freq'] * elapsed + b['phase'])
-        b['rect'].fillColor = [val, val, val]
+        b['rect'].fillColor = (val, val, val)
         b['rect'].draw()
-        b['label'].color = [-1, -1, -1] if val > 0.5 else [1, 1, 1]
+        b['label'].color = (-1, -1, -1) if val > 0.5 else (1, 1, 1)
         b['label'].draw()
 
 

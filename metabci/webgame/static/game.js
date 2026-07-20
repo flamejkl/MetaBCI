@@ -2457,24 +2457,23 @@
             stimCtx.textBaseline = 'middle';
             stimCtx.fillText({up:'↑', down:'↓', left:'←', right:'→'}[dir], pos.x, pos.y);
         }
-        // 红色三角指示箭头 (⯆，离线实验同款)
+        // 红色三角箭头 — 在目标块邻接间隙中，指向目标块
         const upPos = positions['up'], downPos = positions['down'];
         const leftPos = positions['left'], rightPos = positions['right'];
         const triSize = Math.round(Math.min(upPos.w, upPos.h) * 0.8);
-        const triY = upPos.y;  // 与刺激块同一水平线
+        const triY = upPos.y;
         let triX, angle;
-        if (targetDir === 'up' || targetDir === 'down') {
-            // 左箭头：↑↓ 之间
-            triX = (upPos.x + upPos.w/2 + downPos.x - downPos.w/2) / 2;
-            angle = (targetDir === 'up') ? Math.PI : 0;  // 上:180°, 下:0°
-        } else {
-            // 右箭头：←→ 之间
-            triX = (leftPos.x + leftPos.w/2 + rightPos.x - rightPos.w/2) / 2;
-            angle = (targetDir === 'left') ? -Math.PI / 2 : Math.PI / 2;  // 左:-90°, 右:90°
-        }
+        // 箭头在哪个间隙、指向哪边
+        const gapMap = {
+            up:    { x: (upPos.x + upPos.w/2 + downPos.x - downPos.w/2) / 2,   angle: -Math.PI/2 },  // 左间隙, 指向左(↑)
+            down:  { x: (upPos.x + upPos.w/2 + downPos.x - downPos.w/2) / 2,   angle: Math.PI/2 },   // 左间隙, 指向右(↓)
+            left:  { x: (leftPos.x + leftPos.w/2 + rightPos.x - rightPos.w/2)/2, angle: -Math.PI/2 }, // 右间隙, 指向左(←)
+            right: { x: (leftPos.x + leftPos.w/2 + rightPos.x - rightPos.w/2)/2, angle: Math.PI/2 },  // 右间隙, 指向右(→)
+        };
+        const g = gapMap[targetDir];
         stimCtx.save();
-        stimCtx.translate(triX, triY);
-        stimCtx.rotate(angle);
+        stimCtx.translate(g.x, triY);
+        stimCtx.rotate(g.angle);
         stimCtx.fillStyle = '#ff0000';
         stimCtx.font = `bold ${triSize}px Arial`;
         stimCtx.textAlign = 'center';
