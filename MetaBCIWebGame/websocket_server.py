@@ -381,7 +381,6 @@ class WebSocketServer:
                         self.engine.request_reset()
                         if hasattr(self, '_skip_stale') and self._skip_stale:
                             self._skip_stale()
-                                self._skip_stale()
 
                         self.engine.context["expected_dir"] = expected_dir
                         # 根据状态决定 msg_type
