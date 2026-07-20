@@ -2379,6 +2379,7 @@
             if (collectIndex >= collectSequence.length && collectMode) {
                 const infoEl = document.getElementById('collect-info');
                 if (infoEl) infoEl.innerHTML = `✅ 采集完成！共 ${collectSequence.length} 试次`;
+                stopStimuli();
                 setTimeout(() => stopCollectMode(), 2000);
             }
             return;
@@ -2389,41 +2390,24 @@
         collectTargetDir = dirs[dirIdx];
         const infoEl = document.getElementById('collect-info');
 
-        // ---- 阶段1: 预览 (所有块常亮 1s) ----
-        collectPhase = 'preview';
-        if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 🔍 预览中...`;
-        // rAF 循环会检测 collectPhase 并调用 drawAllGray()
+        // ---- 阶段1: 提示目标方向 (1s) ----
+        collectPhase = 'index';
+        if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👉 目标: ${collectTargetDir}`;
+        if (!stimFlashing) startStimuli();
+        stimFlashing = false;  // 提示期间不闪烁
 
         setTimeout(() => {
             if (!collectMode) return;
-            // ---- 阶段2: 提示目标方向 (目标块高亮 1s) ----
-            collectPhase = 'index';
-            if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | 👉 目标: ${collectTargetDir}`;
-            // rAF 循环会检测 collectPhase 并调用 drawIndexFrame()
-
-            setTimeout(() => {
-                if (!collectMode) return;
-                // ---- 阶段3: 休息 (十字准星 0.5s) ----
-                collectPhase = 'rest';
-                if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ✚ 休息`;
-                // rAF 循环会检测 collectPhase 并调用 drawRestFrame()
-
-                setTimeout(() => {
-                    if (!collectMode) return;
-                    // ---- 阶段4: 闪烁采集 (2s) ----
-                    collectPhase = 'stimulus';
-                    if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ⚡ 采集: ${collectTargetDir}`;
-                    stimFlashing = true;
-                    stimStartTime = performance.now();
-                    lastStimFrameTime = stimStartTime;
-                    // rAF 循环检测到 collectPhase==='stimulus' 后恢复正常闪烁绘制
-                    // 发送采集指令
-                    if (ws && ws.readyState === WebSocket.OPEN) {
-                        ws.send(JSON.stringify({ type: "collect_step", direction: collectTargetDir }));
-                    }
-                }, 500);  // 休息0.5s
-            }, 1000);  // 提示1s
-        }, 1000);  // 预览1s
+            // ---- 阶段2: 闪烁采集 (2s) ----
+            collectPhase = 'stimulus';
+            if (infoEl) infoEl.innerHTML = `📥 试次 ${collectIndex + 1}/${collectSequence.length} | ⚡ 采集: ${collectTargetDir}`;
+            stimFlashing = true;
+            stimStartTime = performance.now();
+            lastStimFrameTime = stimStartTime;
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(JSON.stringify({ type: "collect_step", direction: collectTargetDir }));
+            }
+        }, 1000);  // 提示1s
     }
 
     function drawAllGray() {

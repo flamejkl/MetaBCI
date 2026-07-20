@@ -468,8 +468,6 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
                             await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
                             await asyncio.sleep(1.0)
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "rest"})
-                            await asyncio.sleep(0.5)
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
 
                         # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
@@ -504,6 +502,7 @@ class WebSocketServer:
                         self._collect_active = False
                         total = sum(self._collect_counter.values())
                         log(f"[COLLECT] 采集结束，共 {total} 试次: {dict(self._collect_counter)}")
+                        await self._broadcast_stim({"type": "stim_stop"})
                         await self._stop_all()
                         await websocket.send(json.dumps({"type": "collect_stopped", "total": total}))
                         continue
