@@ -203,8 +203,9 @@ def draw_rest(win, blocks):
 def draw_flash(win, blocks, elapsed):
     """闪烁阶段：正弦波调制（与训练实验完全一致）。"""
     for b in blocks:
-        val = 0.7 + 0.3 * np.sin(2 * np.pi * b['freq'] * elapsed + b['phase'])  # 0.4~1.0
-        b['rect'].fillColor = (val, val, val)
+        val = 0.5 + 0.5 * np.sin(2 * np.pi * b['freq'] * elapsed + b['phase'])
+        b['rect'].fillColor = (1, 1, 1)           # 始终白色
+        b['rect'].opacity = val                    # 正弦调制透明度 (更亮的视觉效果)
         b['rect'].draw()
         b['label'].color = (-1, -1, -1) if val > 0.5 else (1, 1, 1)
         b['label'].draw()
