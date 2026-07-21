@@ -402,18 +402,32 @@ class WebSocketServer:
                             if onset == 0 or onset + 500 > full.shape[1]:
                                 onset = 0
                             raw = full[self.acq.channel_indices, onset:onset+500]
-                            # 直接 model.predict 快速预测（TriggerBox已确保相位对齐）
+                            # 渐进窗口预测 (125/250/375/500点, 提前停止)
                             trial = raw.astype(np.float64)
                             trial = trial - np.mean(trial, axis=1, keepdims=True)
                             occ_idx = [2,3,4,5,6,7,8,9]
                             trial = trial[occ_idx, :]
-                            pred = self.gw_decoder.models[500].predict(trial[np.newaxis,...])[0]
-                            decoded_dir = ["up","down","left","right"][pred]
+                            decision, conf, dec_len = None, 0.0, 500
+                            for w in [125, 250, 375, 500]:
+                                win = trial[:, :w]
+                                scores = self.gw_decoder.models[w].transform(win[np.newaxis,...])[0]
+                                top2 = np.partition(scores, -2)[-2:]
+                                margin = top2.max() - top2.min()
+                                max_s = np.max(scores)
+                                if margin > 0.35 and max_s > 0.5:
+                                    decision = np.argmax(scores)
+                                    conf = float(max_s)
+                                    dec_len = w
+                                    break
+                            if decision is None:
+                                decision = np.argmax(scores) if w == 500 else 0
+                            decoded_dir = ["up","down","left","right"][decision]
                             match = (decoded_dir == expected_dir)
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
-                                "confidence": 1.0, "decision_time": 2.0
+                                "confidence": round(float(conf), 3),
+                                "decision_time": round(dec_len / 250.0, 3)
                             }))
                             continue  # 跳过引擎流程
                         else:
