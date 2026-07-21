@@ -402,18 +402,29 @@ class WebSocketServer:
                             if onset == 0 or onset + 500 > full.shape[1]:
                                 onset = 0
                             raw = full[self.acq.channel_indices, onset:onset+500]
-                            # 用 GrowingWindow 的 500 点 browser 模型预测
+                            # GrowingWindowDecoder 逐样本 feed 实现提前决策
                             trial = raw.astype(np.float64)
-                            trial = trial - np.mean(trial, axis=1, keepdims=True)
                             occ_idx = [2,3,4,5,6,7,8,9]
                             trial = trial[occ_idx, :]
-                            pred = self.gw_decoder.models[500].predict(trial[np.newaxis,...])[0]
-                            decoded_dir = ["up","down","left","right"][pred]
+                            self.gw_decoder.reset()
+                            self.gw_decoder.reset_normaliser()
+                            decision, conf, dec_t = None, 0.0, 2.0
+                            for s in range(trial.shape[1]):
+                                d, c, t = self.gw_decoder.feed(trial[:, s])
+                                if d is not None:
+                                    decision, conf, dec_t = d, c, t
+                                    break
+                            if decision is None:
+                                decision = np.argmax(self.gw_decoder._last_scores) if self.gw_decoder._last_scores is not None else 0
+                                conf = 0.0
+                                dec_t = 2.0
+                            decoded_dir = ["up","down","left","right"][decision]
                             match = (decoded_dir == expected_dir)
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
-                                "confidence": 1.0, "decision_time": 2.0
+                                "confidence": round(float(conf), 3),
+                                "decision_time": round(dec_t, 3)
                             }))
                             continue  # 跳过引擎流程
                         else:
