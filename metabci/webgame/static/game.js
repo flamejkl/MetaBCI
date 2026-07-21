@@ -340,10 +340,9 @@
 
     function resizeGameForFullscreen() {
         const headerH = 36;
-        const stimH = Math.round(window.innerHeight * 0.22);
+        const stimH = Math.round(window.innerHeight * 0.25); // 留给 PsychoPy
         const availH = window.innerHeight - headerH - stimH;
         const availW = window.innerWidth;
-        // 正方形游戏画布，取最大内接正方形，留 5% 边距
         const size = Math.floor(Math.min(availH * 0.92, availW * 0.90));
         gameCanvas.width = size;
         gameCanvas.height = size;

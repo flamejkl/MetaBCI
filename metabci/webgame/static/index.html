@@ -274,19 +274,9 @@
             display: none;
         }
 
-        /* ---- 底部刺激块 (fixed bottom) ---- */
+        /* ---- 底部刺激由 PsychoPy 提供，隐藏浏览器 Canvas ---- */
         body.fullscreen #stimCanvas {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100vw;
-            height: 22vh;
-            border: none;
-            border-radius: 0;
-            box-shadow: 0 -2px 20px rgba(0,0,0,0.6);
-            pointer-events: none;
-            z-index: 90;
-            background: #0d0d0d;
+            display: none;
         }
 
         /* ---- 浮动控制面板（vw/vh 自适应缩放）---- */
