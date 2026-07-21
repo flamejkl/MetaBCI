@@ -69,12 +69,14 @@ def send_trigger(code):
     """向 TriggerBox 发送触发编码 (1-5)。与离线实验命令格式一致。"""
     global trigger_ser
     if trigger_ser is None:
+        print(f"[Trigger] 未连接，无法发送 code={code}")
         return
     try:
         cmd = bytes([0x01, 0xE1, 0x01, 0x00, code])
         trigger_ser.write(cmd)
-    except Exception:
-        pass
+        print(f"[Trigger] 已发送 code={code}")
+    except Exception as e:
+        print(f"[Trigger] 发送失败: {e}")
 
 
 def create_window():

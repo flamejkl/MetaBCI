@@ -489,6 +489,9 @@ class WebSocketServer:
                         with self.acq._lock_full:
                             full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
                         trigger_ch = full[-1, :]
+                        # 调试：打印 Trigger 通道前10个值
+                        uniq = np.unique(trigger_ch)
+                        log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
                         onset = 0
                         for i in range(len(trigger_ch) - 1):
                             if trigger_ch[i] < 1.5 and trigger_ch[i+1] >= 1.5:
