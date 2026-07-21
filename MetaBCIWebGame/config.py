@@ -17,7 +17,7 @@ L_FREQ = 8
 H_FREQ = 30
 
 # ========== 模型参数 ==========
-MODEL_PATH = os.path.join(BASE_DIR, "self_ssvep_model.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "self_ssvep_model_browser.pkl")
 
 # ========== 动态停止参数 ==========
 DYNAMIC_STOPPING_WINDOWS = [0.4, 0.6, 0.8, 1.0]
