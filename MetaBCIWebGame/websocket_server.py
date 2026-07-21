@@ -382,10 +382,11 @@ class WebSocketServer:
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # 等2.5秒让数据积累后提取
+                            # 固定0.5s(125点)诊断测试
                             import time as _time
+                            W = 125  # 诊断：只用0.5秒窗口
                             start = self.acq.get_sample_count()
-                            await asyncio.sleep(2.5)
+                            await asyncio.sleep(1.0)  # 等1秒够125点
                             end = self.acq.get_sample_count()
                             with self.acq._lock_full:
                                 full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
@@ -394,25 +395,16 @@ class WebSocketServer:
                             for i in range(len(trigger_ch)-1):
                                 if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
                                     onset = i+1; break
-                            if onset == 0 or onset + 500 > full.shape[1]:
+                            if onset == 0 or onset + W > full.shape[1]:
                                 onset = 0
-                            raw = full[self.acq.channel_indices, onset:onset+500]
-                            # GWDecoder 在线程池中跑，不阻塞事件循环
+                            raw = full[self.acq.channel_indices, onset:onset+W]
                             trial = raw.astype(np.float64)
                             occ_idx = [2,3,4,5,6,7,8,9]
                             trial = trial[occ_idx, :]
-                            def decode():
-                                self.gw_decoder.reset()
-                                d, c, t = None, 0.0, 2.0
-                                for s in range(trial.shape[1]):
-                                    dd, cc, tt = self.gw_decoder.feed(trial[:, s])
-                                    if dd is not None: d, c, t = dd, cc, tt; break
-                                if d is None:
-                                    sc = self.gw_decoder._last_scores
-                                    d = int(np.argmax(sc)) if sc is not None else 0
-                                return d, c, t
-                            loop = asyncio.get_running_loop()
-                            decision, conf, dec_t = await loop.run_in_executor(None, decode)
+                            trial = trial - np.mean(trial, axis=1, keepdims=True)
+                            pred = self.gw_decoder.models[W].predict(trial[np.newaxis,...])[0]
+                            decision = pred
+                            conf = 0.5; dec_t = W / 250.0
                             decoded_dir = ["up","down","left","right"][decision]
                             match = (decoded_dir == expected_dir)
                             await websocket.send(json.dumps({
