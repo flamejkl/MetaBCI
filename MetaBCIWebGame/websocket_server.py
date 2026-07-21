@@ -464,8 +464,12 @@ class WebSocketServer:
                         next_fn, skip_stale = _make_next_acq_sample(self.acq)
                         self._skip_stale = skip_stale
                         self.engine.data_source_callback = next_fn
-                        self.engine.set_mode(ContinuousStreamingEngine.State.EVAL)
-                        await self.engine.start()
+                        # PsychoPy模式下不启动引擎(避免与eval handler线程竞争decoder)
+                        if not self.stim_clients:
+                            self.engine.set_mode(ContinuousStreamingEngine.State.EVAL)
+                            await self.engine.start()
+                        else:
+                            self.engine.set_mode(ContinuousStreamingEngine.State.IDLE)
                         await websocket.send(json.dumps({"type": "eval_started", "status": "ready"}))
                         await self._broadcast_stim({"type": "stim_start"})
                         continue
