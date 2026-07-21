@@ -30,22 +30,32 @@ cue_deadline = 0.0                      # 提示高亮截至时间（秒）
 
 
 def create_window():
-    """创建全屏 PsychoPy — 刺激块在屏幕中央(y=0), 与离线实验一致。
-    浏览器用作小窗反馈, ALT+TAB切换。"""
+    """创建底部刺激窗口 — 置顶在浏览器下方。"""
     from psychopy import monitors as mon
+    WINDOW_HEIGHT_RATIO = 0.25
     m = mon.Monitor('stimMonitor', width=53, distance=60, verbose=False)
     m.setSizePix([1920, 1080])
+    scr_width, scr_height = m.getSizePix()
+    win_height = int(scr_height * WINDOW_HEIGHT_RATIO)
     win = visual.Window(
         monitor=m,
-        size=[1920, 1080],
+        size=[scr_width, win_height],
+        pos=[0, scr_height - win_height],
         color=(-1, -1, -1), colorSpace='rgb',
-        fullscr=True,
+        fullscr=False,
         screen=0,
         units='pix',
         winType='pyglet',
         allowGUI=False,
         waitBlanking=True,
     )
+    try:
+        import ctypes
+        hwnd = getattr(win.winHandle, '_hwnd', getattr(win.winHandle, 'handle', None))
+        if hwnd:
+            ctypes.windll.user32.SetWindowPos(hwnd, -1, 0, scr_height-win_height, scr_width, win_height, 0x0001)
+    except Exception:
+        pass
     return win
 
 
