@@ -2151,9 +2151,11 @@
         const itrStr_eval = itr_eval ? ` | ITR: ${itr_eval.ITR.toFixed(1)} bits/min (${(itr_eval.avgTime*1000).toFixed(0)}ms/trial)` : '';
         const summaryDiv = document.getElementById('demo-summary');
         if (summaryDiv) {
-            summaryDiv.innerHTML = `在线评测结果 | 总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%${itrStr_eval}`;
+            summaryDiv.innerHTML = `在线评测结果 | 总尝试: ${totalAttempts} | 正确步数: ${correct} | 准确率: ${accuracy}%${itrStr_eval} | 提前停止率: ${earlyRate}%`;
         }
-        console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%${itrStr_eval}`);
+        const earlyCount = evalResults.filter(s => s.early).length;
+        const earlyRate = totalAttempts > 0 ? (earlyCount / totalAttempts * 100).toFixed(1) : 0;
+        console.log(`[评测汇总] 总尝试: ${totalAttempts}, 正确: ${correct}, 准确率: ${accuracy}%${itrStr_eval} | 提前停止率: ${earlyRate}% (${earlyCount}/${totalAttempts})`);
     }
 
     function startNextEvalTrial() {
@@ -2269,7 +2271,8 @@
             confidence: data.confidence || 0,
             decision_time: data.decision_time || 2.0,
             step: evalTrialIndex + 1,
-            retry: evalRetryCount
+            retry: evalRetryCount,
+            early: data.early || false
         });
 
         const statusIcon = match ? '✅' : '❌';

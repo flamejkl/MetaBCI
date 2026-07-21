@@ -427,7 +427,9 @@ class WebSocketServer:
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
                                 "confidence": round(float(conf), 3),
-                                "decision_time": round(dec_len / 250.0, 3)
+                                "decision_time": round(dec_len / 250.0, 3),
+                                "early": dec_len < 500,
+                                "window_ms": int(dec_len / 250 * 1000)
                             }))
                             continue  # 跳过引擎流程
                         else:
