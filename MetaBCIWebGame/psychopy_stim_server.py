@@ -147,9 +147,9 @@ def create_blocks(win):
 def draw_preview(win, blocks):
     """预览阶段：所有块白色常亮。"""
     for b in blocks:
-        b['rect'].fillColor = [1, 1, 1]
+        b['rect'].fillColor = (1, 1, 1)
         b['rect'].draw()
-        b['label'].color = [-1, -1, -1]
+        b['label'].color = (-1, -1, -1)
         b['label'].draw()
 
 
@@ -158,9 +158,9 @@ def draw_index(win, blocks, target_dir):
     for b in blocks:
         is_target = (b['dir'] == target_dir)
         c = 1.0 if is_target else 0.25
-        b['rect'].fillColor = [c, c, c]
+        b['rect'].fillColor = (c, c, c)
         b['rect'].draw()
-        b['label'].color = [-1, -1, -1] if is_target else [1, 1, 1]
+        b['label'].color = (-1, -1, -1) if is_target else (1, 1, 1)
         b['label'].draw()
     # 红色三角箭头 — 在目标块邻接间隙中，指向目标块
     b_up = next(b for b in blocks if b['dir'] == 'up')
@@ -240,9 +240,9 @@ def render_loop(win, blocks):
             draw_flash(win, blocks, elapsed)
         else:
             for b in blocks:
-                b['rect'].fillColor = [0.5, 0.5, 0.5]
+                b['rect'].fillColor = (0.5, 0.5, 0.5)
                 b['rect'].draw()
-                b['label'].color = [-1, -1, -1]
+                b['label'].color = (-1, -1, -1)
                 b['label'].draw()
 
         win.flip()
