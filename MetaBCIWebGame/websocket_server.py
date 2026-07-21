@@ -426,6 +426,8 @@ class WebSocketServer:
                             raw = full[self.acq.channel_indices, onset:onset + W]
                             trial = raw.astype(np.float64)
                             trial = trial[occ_idx, :]                    # 枕区8通道
+                            # HACK: POz(索引7)电极异常(100x噪声), 用PO6(索引6)替代
+                            trial[7, :] = trial[6, :].copy()
                             trial = trial - np.mean(trial, axis=1, keepdims=True)
 
                             # 4.5) 数据质量日志（每10次打印一次）
