@@ -377,21 +377,15 @@ class WebSocketServer:
                         if self.stim_clients:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
                             await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
-                            await asyncio.sleep(1.0)
+                            await asyncio.sleep(0.5)  # 提示0.5s即可
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # Trigger精确提取 500 点 → 直接模型预测
+                            # 等2.5秒让数据积累后提取
                             import time as _time
                             start = self.acq.get_sample_count()
-                            dl = _time.time() + 2.5
-                            while True:
-                                await asyncio.sleep(0.05)
-                                end = self.acq.get_sample_count()
-                                if end - start >= 800:
-                                    break
-                                if _time.time() > dl:
-                                    break
+                            await asyncio.sleep(2.5)
+                            end = self.acq.get_sample_count()
                             with self.acq._lock_full:
                                 full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
                             trigger_ch = full[-1, :]
