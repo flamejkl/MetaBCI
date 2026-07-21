@@ -98,7 +98,12 @@ def compute_itr(decisions, labels, times, n_classes=4):
 #  评估主流程
 # ============================================================
 def load_test_data(data_root, occipital_indices=None):
-    """加载测试数据，返回 (X_list, y_list)。"""
+    """加载测试数据，返回 (X_list, y_list)。
+
+    支持两种文件格式:
+    - *offset000.npy  (data_self / data_self_multi_offset)
+    - *.npy           (data_self_test / data_self_browser, 格式: 15x500)
+    """
     import os, glob
     if occipital_indices is None:
         occipital_indices = OCCIPITAL_INDICES
@@ -107,8 +112,15 @@ def load_test_data(data_root, occipital_indices=None):
         folder = os.path.join(data_root, str(label + 1))
         if not os.path.isdir(folder):
             continue
-        for f in glob.glob(os.path.join(folder, '*offset000.npy')):
+        # 优先 offset000 格式，否则加载所有 .npy
+        files = glob.glob(os.path.join(folder, '*offset000.npy'))
+        if not files:
+            files = sorted(glob.glob(os.path.join(folder, '*.npy')))
+        for f in files:
             data = np.load(f)
+            # 15通道格式 (14 EEG + Trigger): 去Trigger, 保留前14通道
+            if data.shape[0] == 15:
+                data = data[:14, :]
             data = data[occipital_indices, :]  # (8, 500)
             X.append(data)
             y.append(label)
