@@ -364,7 +364,8 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "引擎未初始化"}))
                             continue
                         if self.engine.state not in (ContinuousStreamingEngine.State.DEMO,
-                                                     ContinuousStreamingEngine.State.EVAL):
+                                                     ContinuousStreamingEngine.State.EVAL,
+                                                     ContinuousStreamingEngine.State.IDLE):
                             await websocket.send(json.dumps({"type": "error", "message": "未处于演示或评测模式"}))
                             continue
 
