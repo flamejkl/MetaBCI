@@ -388,13 +388,13 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
                             # ====== 固定0.5s(125点)诊断测试 ======
                             import time as _time
-                            W = 125
+                            W = 250  # 测试1.0s窗口
                             model = self.gw_decoder.models[W]
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
-                            # 1) 等1秒采集数据
+                            # 1) 等1.5秒采集数据 (250点需要1秒+余量)
                             start = self.acq.get_sample_count()
-                            await asyncio.sleep(1.0)
+                            await asyncio.sleep(1.5)
                             end = self.acq.get_sample_count()
 
                             # 2) 从全通道buffer提取
