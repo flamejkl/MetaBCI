@@ -52,10 +52,10 @@ OFFLINE_TIMEOUT_DELAY = 1.0
 
 # ========== Growing Window 动态停止参数 ==========
 GW_MODEL_PATHS = {
-    125: os.path.join(BASE_DIR, "model_125.pkl"),
-    250: os.path.join(BASE_DIR, "model_250.pkl"),
-    375: os.path.join(BASE_DIR, "model_375.pkl"),
-    500: os.path.join(BASE_DIR, "self_ssvep_model.pkl")
+    125: os.path.join(BASE_DIR, "model_125_browser.pkl"),
+    250: os.path.join(BASE_DIR, "model_250_browser.pkl"),
+    375: os.path.join(BASE_DIR, "model_375_browser.pkl"),
+    500: os.path.join(BASE_DIR, "self_ssvep_model_browser.pkl")
 }
 GW_CHECK_STEP = 25          # 检测步长（采样点），25 = 100ms
 GW_MIN_LENGTH = 125         # 0.5s 开始检测
