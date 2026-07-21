@@ -496,12 +496,13 @@ class WebSocketServer:
                                 break
                         if onset == 0:
                             log(f"[COLLECT] 未检测到Trigger跳变，使用buffer起点")
-                        # 提取14通道500点
                         if onset + 500 > full.shape[1]:
                             log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1]}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据长度不足"}))
                             continue
-                        raw = full[:14, onset:onset + 500]
+                        # 提取目标通道(非前14个), 用acq.channel_indices选择
+                        ch_idx = self.acq.channel_indices
+                        raw = full[ch_idx, onset:onset + 500]
                         idx = self._collect_counter[label]
                         fname = os.path.join(self._collect_root, str(label + 1), f"browser_trial_{idx:04d}.npy")
                         np.save(fname, raw)
