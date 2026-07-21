@@ -66,12 +66,12 @@ def init_trigger():
 
 
 def send_trigger(code):
-    """向 TriggerBox 发送触发编码 (1-5)。"""
+    """向 TriggerBox 发送触发编码 (1-5)。与离线实验命令格式一致。"""
     global trigger_ser
     if trigger_ser is None:
         return
     try:
-        cmd = bytes([0x01, 0x04, 0x00, code])
+        cmd = bytes([0x01, 0xE1, 0x01, 0x00, code])
         trigger_ser.write(cmd)
     except Exception:
         pass
