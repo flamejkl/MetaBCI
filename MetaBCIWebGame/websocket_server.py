@@ -402,21 +402,13 @@ class WebSocketServer:
                             if onset == 0 or onset + 500 > full.shape[1]:
                                 onset = 0
                             raw = full[self.acq.channel_indices, onset:onset+500]
-                            # GWDecoder feed 全链路（EMA+陷波+缓冲区+渐进检测=与训练一致）
+                            # 直接 model.predict (TriggerBox确保相位一致, 无需GWDecoder)
                             trial = raw.astype(np.float64)
+                            trial = trial - np.mean(trial, axis=1, keepdims=True)
                             occ_idx = [2,3,4,5,6,7,8,9]
                             trial = trial[occ_idx, :]
-                            self.gw_decoder.reset()
-                            decision, conf, dec_len = None, 0.0, 500
-                            for s in range(trial.shape[1]):
-                                d, c, t = self.gw_decoder.feed(trial[:, s])
-                                if d is not None:
-                                    decision, conf, dec_len = d, c, t
-                                    break
-                            if decision is None:
-                                sc = self.gw_decoder._last_scores
-                                decision = int(np.argmax(sc)) if sc is not None else 0
-                            decoded_dir = ["up","down","left","right"][decision]
+                            pred = self.gw_decoder.models[500].predict(trial[np.newaxis,...])[0]
+                            decoded_dir = ["up","down","left","right"][pred]
                             match = (decoded_dir == expected_dir)
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
