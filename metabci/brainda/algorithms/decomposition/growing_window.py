@@ -30,6 +30,7 @@ Reference
 import numpy as np
 import joblib
 from collections import deque
+from scipy.signal import iircomb, filtfilt
 
 # Default paths mirror the MetaBCIWebGame convention; override via __init__
 _DEFAULT_MODEL_PATHS = {
@@ -93,6 +94,10 @@ class GrowingWindowDecoder:
         self._cached_window = None
         self._last_scores = None    # exposed for confidence visualization
         self._cached_model_len = None
+
+        # ---- 50Hz 陷波 (对齐 FBCCA，消除工频干扰) ----
+        fs = self.sample_rate
+        self._notch_b, self._notch_a = iircomb(50, 35, ftype='notch', fs=fs)
 
         # ---- online EMA normalisation ----
         self._online_norm = enable_online_norm
@@ -233,13 +238,12 @@ class GrowingWindowDecoder:
         ])
 
     def _preprocess(self, window):
-        """Match training pipeline: per-channel detrend only.
+        """50Hz工频陷波 → 去趋势 (对齐FBCCA预处理)。
 
-        The model (FBTDCA/FBTRCA) includes its own filterbank — applying an
-        extra bandpass + blend here would distort the subband power
-        distribution and destroy classification accuracy.
+        FBTDCA模型自带子带滤波器，不再加额外带通以避免分布漂移。
         """
-        return window - np.mean(window, axis=1, keepdims=True)
+        notch = filtfilt(self._notch_b, self._notch_a, window, axis=-1)
+        return notch - np.mean(notch, axis=1, keepdims=True)
 
     def _best_model_len(self, L):
         for wl in self.model_lengths:
