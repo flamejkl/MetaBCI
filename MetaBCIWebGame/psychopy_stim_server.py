@@ -7,6 +7,8 @@ PsychoPy SSVEP 刺激窗口 — 替代浏览器 Canvas 渲染。
 import sys, os, json, time, threading, asyncio
 import numpy as np
 import websockets
+import serial
+import serial.tools.list_ports
 
 # PsychoPy imports
 from psychopy import visual, core, monitors, event
@@ -27,6 +29,52 @@ stim_start_time = 0.0
 current_target = None
 collect_phase = None                    # 'preview'|'index'|'rest'|'stimulus'
 cue_deadline = 0.0                      # 提示高亮截至时间（秒）
+trigger_ser: serial.Serial = None       # TriggerBox 串口句柄
+DIR_TO_TRIGGER = {'up': 1, 'down': 2, 'left': 3, 'right': 4}
+
+
+def detect_triggerbox():
+    """自动扫描 COM 口检测 TriggerBox，返回端口名或 None。"""
+    for p in serial.tools.list_ports.comports():
+        try:
+            ser = serial.Serial(port=p.device, baudrate=115200,
+                                bytesize=8, stopbits=1, parity='N', timeout=0.5)
+            ser.reset_input_buffer()
+            ser.write(bytes([0x01, 0x04, 0x00, 0x00]))
+            time.sleep(0.05)
+            resp = ser.read(ser.in_waiting or 30)
+            ser.close()
+            if resp:
+                if 'TriggerBox.Titing' in resp.decode('ascii', errors='ignore'):
+                    return p.device
+        except Exception:
+            continue
+    return None
+
+
+def init_trigger():
+    """初始化 TriggerBox 硬件打标。"""
+    global trigger_ser
+    port = detect_triggerbox()
+    if port:
+        trigger_ser = serial.Serial(port=port, baudrate=115200,
+                                     bytesize=8, stopbits=1, parity='N', timeout=0.1)
+        print(f'[Trigger] TriggerBox 已连接: {port}')
+        return True
+    print('[Trigger] 未检测到 TriggerBox，使用软件标记')
+    return False
+
+
+def send_trigger(code):
+    """向 TriggerBox 发送触发编码 (1-5)。"""
+    global trigger_ser
+    if trigger_ser is None:
+        return
+    try:
+        cmd = bytes([0x01, 0x04, 0x00, code])
+        trigger_ser.write(cmd)
+    except Exception:
+        pass
 
 
 def create_window():
@@ -226,12 +274,16 @@ async def ws_client():
                         if t == "stim_start":
                             stim_flashing = True
                             stim_start_time = time.perf_counter()
+                            # 发送开始触发 (编码1=通用开始)
+                            send_trigger(1)
                             print("[PsychoPy] 刺激开始")
 
                         elif t == "stim_stop":
                             stim_flashing = False
                             collect_phase = None
                             current_target = None
+                            # 发送结束触发 (编码5=试次结束)
+                            send_trigger(5)
                             print("[PsychoPy] 刺激停止")
 
                         elif t == "stim_phase":
@@ -240,15 +292,24 @@ async def ws_client():
                             if phase == 'stimulus':
                                 stim_flashing = True
                                 stim_start_time = time.perf_counter()
+                                # 方向触发: 从后端传来的 direction 字段
+                                direction = data.get("direction", "")
+                                code = DIR_TO_TRIGGER.get(direction, 1)
+                                send_trigger(code)
                             else:
                                 stim_flashing = False
+                                if phase == 'rest':
+                                    send_trigger(5)  # 试次结束
                             print(f"[PsychoPy] 阶段: {phase}")
 
                         elif t == "stim_target":
                             current_target = data.get("direction")
                             # 短暂高亮 0.8s 提示用户注视目标方向
                             cue_deadline = time.perf_counter() + 0.8
-                            print(f"[PsychoPy] 目标: {current_target} (cue 0.8s)")
+                            # 发送方向触发
+                            code = DIR_TO_TRIGGER.get(current_target, 1)
+                            send_trigger(code)
+                            print(f"[PsychoPy] 目标: {current_target} (cue 0.8s, trigger={code})")
 
                     except Exception as e:
                         print(f"[PsychoPy] 消息处理错误: {e}")
@@ -268,6 +329,9 @@ def main():
     win = create_window()
     blocks = create_blocks(win)
     print(f"窗口: {win.size[0]}×{win.size[1]} px, 块: {blocks[0]['size']}px")
+
+    # 初始化 TriggerBox 硬件打标
+    init_trigger()
 
     # WebSocket 在后台线程运行
     loop = asyncio.new_event_loop()
