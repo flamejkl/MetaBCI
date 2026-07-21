@@ -50,6 +50,9 @@ def load_data(root):
             if data.shape[1] < WINDOW_SAMPLES:
                 continue
             data = data[:, :WINDOW_SAMPLES]
+            # 15通道格式(14EEG+Trigger): 只用前14通道训练
+            if data.shape[0] == 15:
+                data = data[:14, :]
             X_list.append(data)
             y_list.append(label)
             groups_list.append(len(groups_list))  # 每个文件作为一个group

@@ -500,12 +500,12 @@ class WebSocketServer:
                             log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1]}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据长度不足"}))
                             continue
-                        # 提取目标通道(非前14个), 用acq.channel_indices选择
-                        ch_idx = self.acq.channel_indices
-                        raw = full[ch_idx, onset:onset + 500]
+                        # 提取目标通道+Trigger (对齐离线实验: 14EEG + Trigger)
+                        ch_idx = self.acq.channel_indices + [64]
+                        raw = full[ch_idx, onset:onset + 500]  # (15, 500)
                         idx = self._collect_counter[label]
                         fname = os.path.join(self._collect_root, str(label + 1), f"browser_trial_{idx:04d}.npy")
-                        np.save(fname, raw)
+                        np.save(fname, raw)      # (15,500): 14EEG + Trigger
                         self._collect_counter[label] += 1
                         log(f"[COLLECT] 已保存: {expected_dir} #{idx} → {fname}  shape={raw.shape}")
                         await websocket.send(json.dumps({"type": "collect_done", "direction": expected_dir, "index": idx}))
