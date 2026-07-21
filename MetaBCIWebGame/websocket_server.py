@@ -428,6 +428,12 @@ class WebSocketServer:
                             trial = trial[occ_idx, :]                    # 枕区8通道
                             trial = trial - np.mean(trial, axis=1, keepdims=True)
 
+                            # 4.5) 数据质量日志（每10次打印一次）
+                            if self._diag_total % 10 == 1:
+                                ch_std = np.std(trial, axis=1)
+                                log(f"[DIAG] EEG质量: 幅值范围=[{trial.min():.1f},{trial.max():.1f}], "
+                                    f"通道std={[f'{s:.1f}' for s in ch_std]}")
+
                             # 5) 预测 + 真实置信度
                             scores = model.transform(trial[np.newaxis, ...])[0]
                             decision = int(np.argmax(scores))
