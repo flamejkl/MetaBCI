@@ -373,17 +373,49 @@ class WebSocketServer:
                             await websocket.send(json.dumps({"type": "error", "message": "无效方向"}))
                             continue
 
-                        # ---- PsychoPy 刺激流程（对齐离线实验: 提示1s → 闪烁2s） ----
+                        # ---- PsychoPy 刺激流程: Trigger精确提取 + 直接模型预测 ----
                         if self.stim_clients:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
                             await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
-                            await asyncio.sleep(1.0)  # 提示阶段：用户转移视线
-                            # 以下三步必须在await之前（同步），确保引擎拿到的第一帧就是正确数据
+                            await asyncio.sleep(1.0)
                             if hasattr(self, '_skip_stale') and self._skip_stale:
-                                self._skip_stale()           # 丢弃提示期无效数据
-                            self.engine.request_reset()      # 请求重置解码器
-                            self.engine.context["expected_dir"] = expected_dir
+                                self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
+                            # Trigger精确提取 500 点 → 直接模型预测
+                            import time as _time
+                            start = self.acq.get_sample_count()
+                            dl = _time.time() + 2.5
+                            while True:
+                                await asyncio.sleep(0.05)
+                                end = self.acq.get_sample_count()
+                                if end - start >= 800:
+                                    break
+                                if _time.time() > dl:
+                                    break
+                            with self.acq._lock_full:
+                                full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                            trigger_ch = full[-1, :]
+                            onset = 0
+                            for i in range(len(trigger_ch)-1):
+                                if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                                    onset = i+1; break
+                            if onset == 0 or onset + 500 > full.shape[1]:
+                                onset = 0
+                            raw = full[self.acq.channel_indices, onset:onset+500]
+                            # 用 GrowingWindow 的 500 点 browser 模型预测
+                            trial = raw.astype(np.float64)
+                            trial = trial - np.mean(trial, axis=1, keepdims=True)
+                            occ_idx = [2,3,4,5,6,7,8,9]
+                            trial = trial[occ_idx, :]
+                            pred = self.gw_decoder.models[500].predict(trial[np.newaxis,...])[0]
+                            decoded_dir = ["up","down","left","right"][pred]
+                            match = (decoded_dir == expected_dir)
+                            await websocket.send(json.dumps({
+                                "type": "eval_result", "decoded": decoded_dir,
+                                "expected": expected_dir, "match": match,
+                                "confidence": 1.0, "decision_time": 2.0
+                            }))
+                            continue  # 跳过引擎流程
                         else:
                             self.engine.request_reset()
                             if hasattr(self, '_skip_stale') and self._skip_stale:
