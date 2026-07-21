@@ -436,6 +436,15 @@ class WebSocketServer:
                                 log(f"[DIAG] EEG质量: 幅值范围=[{trial.min():.1f},{trial.max():.1f}], "
                                     f"通道std={[f'{s:.1f}' for s in ch_std]}")
 
+                            # 4.6) 保存前10个试次到文件（用于离线对比验证）
+                            if self._diag_total <= 10:
+                                dump_dir = os.path.join(BASE_DIR, 'data_self_test')
+                                os.makedirs(dump_dir, exist_ok=True)
+                                dump_path = os.path.join(dump_dir, f'online_diag_{self._diag_total:04d}.npy')
+                                np.save(dump_path, trial)
+                                if self._diag_total == 0:
+                                    log(f"[DIAG] 数据样例保存到: {dump_dir}/online_diag_XXXX.npy")
+
                             # 5) 预测 + 真实置信度
                             scores = model.transform(trial[np.newaxis, ...])[0]
                             decision = int(np.argmax(scores))
