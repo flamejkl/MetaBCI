@@ -472,23 +472,36 @@ class WebSocketServer:
 
                         # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
                         start = self.acq.get_sample_count()
-                        log(f"[COLLECT] 试次开始: {expected_dir}, buffer起点={start}")
                         import time as _time
-                        deadline = _time.time() + 2.5  # 最多等2.5秒
+                        deadline = _time.time() + 2.5
                         while True:
                             await asyncio.sleep(0.05)
                             end = self.acq.get_sample_count()
-                            if end - start >= 500:
+                            if end - start >= 800:  # 多等一些给trigger检测余量
                                 break
                             if _time.time() > deadline:
                                 break
                         if end - start < 500:
-                            log(f"[COLLECT] 数据不足: start={start} end={end} diff={end-start}")
+                            log(f"[COLLECT] 数据不足: start={start} end={end}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据不足"}))
                             continue
-                        # 取14个目标通道，从start开始的500点
-                        with self.acq._lock:
-                            raw = np.array(self.acq.eeg_buffer[start:start + 500], dtype=np.float64).T
+                        # 用 Trigger 通道精确定位试次起点（对齐离线实验）
+                        with self.acq._lock_full:
+                            full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                        trigger_ch = full[-1, :]
+                        onset = 0
+                        for i in range(len(trigger_ch) - 1):
+                            if trigger_ch[i] < 1.5 and trigger_ch[i+1] >= 1.5:
+                                onset = i + 1
+                                break
+                        if onset == 0:
+                            log(f"[COLLECT] 未检测到Trigger跳变，使用buffer起点")
+                        # 提取14通道500点
+                        if onset + 500 > full.shape[1]:
+                            log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1]}")
+                            await websocket.send(json.dumps({"type": "collect_error", "message": "数据长度不足"}))
+                            continue
+                        raw = full[:14, onset:onset + 500]
                         idx = self._collect_counter[label]
                         fname = os.path.join(self._collect_root, str(label + 1), f"browser_trial_{idx:04d}.npy")
                         np.save(fname, raw)
