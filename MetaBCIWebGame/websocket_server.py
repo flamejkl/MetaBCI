@@ -177,6 +177,10 @@ class WebSocketServer:
 
         self.engine = None
         self.model = None
+        # 0.5s 诊断统计
+        self._diag_correct = 0
+        self._diag_total = 0
+        self._diag_trigger_miss = 0
         self.gw_decoder = None
         self.acq = None
         self.offline_gen = None
@@ -382,38 +386,83 @@ class WebSocketServer:
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # 固定0.5s(125点)诊断测试
+                            # ====== 固定0.5s(125点)诊断测试 ======
                             import time as _time
-                            W = 125  # 诊断：只用0.5秒窗口
+                            W = 125
+                            model = self.gw_decoder.models[W]
+                            occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
+
+                            # 1) 等1秒采集数据
                             start = self.acq.get_sample_count()
-                            await asyncio.sleep(1.0)  # 等1秒够125点
+                            await asyncio.sleep(1.0)
                             end = self.acq.get_sample_count()
+
+                            # 2) 从全通道buffer提取
                             with self.acq._lock_full:
                                 full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
                             trigger_ch = full[-1, :]
+
+                            # 3) Trigger上升沿检测 + 详细日志
+                            t_uniq = np.unique(trigger_ch[:min(50, len(trigger_ch))])
                             onset = 0
-                            for i in range(len(trigger_ch)-1):
-                                if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
-                                    onset = i+1; break
+                            for i in range(len(trigger_ch) - 1):
+                                if trigger_ch[i] < 0.5 and trigger_ch[i + 1] >= 0.5:
+                                    onset = i + 1
+                                    break
+
                             if onset == 0 or onset + W > full.shape[1]:
                                 onset = 0
-                            raw = full[self.acq.channel_indices, onset:onset+W]
+                                self._diag_trigger_miss += 1
+                                log(f"[DIAG] ⚠️ 未检测到Trigger跳变! "
+                                    f"前50点唯一值={t_uniq.tolist()}, "
+                                    f"范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}], "
+                                    f"总长={len(trigger_ch)}")
+                            else:
+                                log(f"[DIAG] ✓ Trigger onset={onset}, "
+                                    f"前50点唯一值={t_uniq.tolist()}, "
+                                    f"跳变: {trigger_ch[onset-1]:.1f}→{trigger_ch[onset]:.1f}")
+
+                            # 4) 提取数据 + 预处理（对齐训练）
+                            raw = full[self.acq.channel_indices, onset:onset + W]
                             trial = raw.astype(np.float64)
-                            occ_idx = [2,3,4,5,6,7,8,9]
-                            trial = trial[occ_idx, :]
+                            trial = trial[occ_idx, :]                    # 枕区8通道
                             trial = trial - np.mean(trial, axis=1, keepdims=True)
-                            pred = self.gw_decoder.models[W].predict(trial[np.newaxis,...])[0]
-                            decision = pred
-                            conf = 0.5; dec_t = W / 250.0
-                            decoded_dir = ["up","down","left","right"][decision]
+
+                            # 5) 预测 + 真实置信度
+                            scores = model.transform(trial[np.newaxis, ...])[0]
+                            decision = int(np.argmax(scores))
+                            conf = float(np.max(scores))
+                            # margin: top1 vs top2 差距
+                            top2 = np.partition(scores, -2)[-2:]
+                            margin = float(top2.max() - top2.min())
+
+                            dec_t = W / 250.0
+                            decoded_dir = ["up", "down", "left", "right"][decision]
                             match = (decoded_dir == expected_dir)
+
+                            # 6) 累计统计
+                            self._diag_total += 1
+                            if match:
+                                self._diag_correct += 1
+                            diag_acc = self._diag_correct / self._diag_total * 100
+                            miss_rate = self._diag_trigger_miss / self._diag_total * 100
+
+                            log(f"[DIAG] #{self._diag_total} 目标={expected_dir} "
+                                f"解码={decoded_dir} {'✓' if match else '✗'} "
+                                f"conf={conf:.3f} margin={margin:.3f} "
+                                f"累计准确率={diag_acc:.1f}% ({self._diag_correct}/{self._diag_total}) "
+                                f"Trigger丢失率={miss_rate:.1f}%")
+
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
                                 "confidence": round(float(conf), 3),
+                                "margin": round(margin, 3),
                                 "decision_time": round(float(dec_t), 3),
                                 "early": float(dec_t) < 2.0,
-                                "window_ms": int(float(dec_t) * 1000)
+                                "window_ms": int(float(dec_t) * 1000),
+                                "diag_acc_pct": round(diag_acc, 1),
+                                "diag_total": self._diag_total,
                             }))
                             continue  # 跳过引擎流程
                         else:
@@ -440,6 +489,10 @@ class WebSocketServer:
                     # ---------- 在线评测启动 ----------
                     if msg_type == "start_eval":
                         log("[HANDLER] 收到 start_eval")
+                        # 重置0.5s诊断统计
+                        self._diag_correct = 0
+                        self._diag_total = 0
+                        self._diag_trigger_miss = 0
                         if self.mode != "online":
                             await websocket.send(json.dumps({"type": "eval_error", "message": "请先切换到在线模式"}))
                             continue
