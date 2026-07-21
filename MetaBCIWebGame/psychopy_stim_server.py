@@ -39,14 +39,12 @@ def detect_triggerbox():
         try:
             ser = serial.Serial(port=p.device, baudrate=115200,
                                 bytesize=8, stopbits=1, parity='N', timeout=0.5)
-            ser.reset_input_buffer()
             ser.write(bytes([0x01, 0x04, 0x00, 0x00]))
-            time.sleep(0.05)
-            resp = ser.read(ser.in_waiting or 30)
+            time.sleep(0.1)  # 等足够长时间让TriggerBox响应
+            resp = ser.read(50)
             ser.close()
-            if resp:
-                if 'TriggerBox.Titing' in resp.decode('ascii', errors='ignore'):
-                    return p.device
+            if resp and b'TriggerBox.Titing' in resp:
+                return p.device
         except Exception:
             continue
     return None
