@@ -396,21 +396,31 @@ class WebSocketServer:
                             if onset == 0 or onset + 500 > full.shape[1]:
                                 onset = 0
                             raw = full[self.acq.channel_indices, onset:onset+500]
-                            # 直接 model.predict (TriggerBox确保相位一致, 无需GWDecoder)
+                            # GWDecoder 在线程池中跑，不阻塞事件循环
                             trial = raw.astype(np.float64)
-                            trial = trial - np.mean(trial, axis=1, keepdims=True)
                             occ_idx = [2,3,4,5,6,7,8,9]
                             trial = trial[occ_idx, :]
-                            pred = self.gw_decoder.models[500].predict(trial[np.newaxis,...])[0]
-                            decoded_dir = ["up","down","left","right"][pred]
+                            def decode():
+                                self.gw_decoder.reset()
+                                d, c, t = None, 0.0, 2.0
+                                for s in range(trial.shape[1]):
+                                    dd, cc, tt = self.gw_decoder.feed(trial[:, s])
+                                    if dd is not None: d, c, t = dd, cc, tt; break
+                                if d is None:
+                                    sc = self.gw_decoder._last_scores
+                                    d = int(np.argmax(sc)) if sc is not None else 0
+                                return d, c, t
+                            loop = asyncio.get_running_loop()
+                            decision, conf, dec_t = await loop.run_in_executor(None, decode)
+                            decoded_dir = ["up","down","left","right"][decision]
                             match = (decoded_dir == expected_dir)
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
                                 "confidence": round(float(conf), 3),
-                                "decision_time": round(dec_len / 250.0, 3),
-                                "early": dec_len < 500,
-                                "window_ms": int(dec_len / 250 * 1000)
+                                "decision_time": round(float(dec_t), 3),
+                                "early": float(dec_t) < 2.0,
+                                "window_ms": int(float(dec_t) * 1000)
                             }))
                             continue  # 跳过引擎流程
                         else:
