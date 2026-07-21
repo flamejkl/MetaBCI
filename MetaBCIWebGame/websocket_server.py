@@ -383,7 +383,7 @@ class WebSocketServer:
                                 self._skip_stale()           # 丢弃提示期无效数据
                             self.engine.request_reset()      # 请求重置解码器
                             self.engine.context["expected_dir"] = expected_dir
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
                         else:
                             self.engine.request_reset()
                             if hasattr(self, '_skip_stale') and self._skip_stale:
@@ -468,7 +468,7 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_target", "direction": expected_dir})
                             await self._broadcast_stim({"type": "stim_phase", "phase": "index"})
                             await asyncio.sleep(1.0)
-                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                            await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
 
                         # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
                         start = self.acq.get_sample_count()
@@ -494,7 +494,7 @@ class WebSocketServer:
                         log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
                         onset = 0
                         for i in range(len(trigger_ch) - 1):
-                            if trigger_ch[i] < 1.5 and trigger_ch[i+1] >= 1.5:
+                            if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
                                 onset = i + 1
                                 break
                         if onset == 0:
