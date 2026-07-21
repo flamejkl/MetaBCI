@@ -17,15 +17,9 @@ from sklearn.metrics import accuracy_score
 from config import OFFLINE_DATA_ROOT
 DATA_ROOT = OFFLINE_DATA_ROOT
 OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]
+from config import GW_MODEL_PATHS as MODEL_PATHS
 SAMPLE_RATE = 250
-WINDOW_LENGTHS = [125, 250, 375, 500]  # 模型对应的窗口长度
-
-MODEL_PATHS = {
-    125: "model_125.pkl",
-    250: "model_250.pkl",
-    375: "model_375.pkl",
-    500: "self_ssvep_model.pkl"
-}
+WINDOW_LENGTHS = [125, 250, 375, 500]
 
 # 检测步长（点）和对应时间
 CHECK_STEP = 25  # 100ms

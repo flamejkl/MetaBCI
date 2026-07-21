@@ -25,9 +25,9 @@ OCCIPITAL_INDICES = [2, 3, 4, 5, 6, 7, 8, 9]
 SAMPLE_RATE = 250
 WINDOW_LENGTHS = [125, 250, 375, 500]
 MODEL_PATHS = {
-    125: "model_125.pkl",
-    250: "model_250.pkl",
-    375: "model_375.pkl",
+    125: os.path.join(BASE_DIR, "models", "browser", "model_125_browser.pkl"),
+    250: os.path.join(BASE_DIR, "models", "browser", "model_250_browser.pkl"),
+    375: os.path.join(BASE_DIR, "models", "browser", "model_375_browser.pkl"),
     500: "self_ssvep_model.pkl"
 }
 

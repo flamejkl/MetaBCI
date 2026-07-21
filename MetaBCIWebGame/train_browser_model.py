@@ -14,6 +14,7 @@ from metabci.brainda.algorithms.decomposition.cca import FBTRCA
 from metabci.brainda.algorithms.decomposition.base import generate_filterbank, generate_cca_references
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+MODEL_DIR = os.path.join(BASE_DIR, "models", "browser")
 TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
 WINDOW_SAMPLES = 500
 SAMPLE_RATE = 250
@@ -107,7 +108,7 @@ else:
     final.fit(X, y)
 
 # ---- 保存 ----
-joblib.dump(final, os.path.join(BASE_DIR, "self_ssvep_model_browser.pkl"))
+joblib.dump(final, os.path.join(MODEL_DIR, "self_ssvep_model_browser.pkl"))
 print("模型已保存: self_ssvep_model_browser.pkl")
 
 # ---- 也训练Growing Window模型 ----
@@ -145,7 +146,7 @@ for L in [125, 250, 375, 500]:
     final_L.fit(X_L, y_L, Yf=Yf_L)
     fname = {125: 'model_125_browser.pkl', 250: 'model_250_browser.pkl',
              375: 'model_375_browser.pkl', 500: 'self_ssvep_model_browser.pkl'}[L]
-    joblib.dump(final_L, os.path.join(BASE_DIR, fname))
+    joblib.dump(final_L, os.path.join(MODEL_DIR, fname))
 
 print("\n全部模型已保存。使用方式:")
 print("  修改 config.py GW_MODEL_PATHS 指向上面的 *_browser.pkl 文件")

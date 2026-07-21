@@ -29,10 +29,10 @@ TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
 SAMPLE_RATE = 250
 
 MODEL_OUTPUTS = {
-    125: "model_125.pkl",
-    250: "model_250.pkl",
-    375: "model_375.pkl",
-    500: "self_ssvep_model.pkl",
+    125: os.path.join(BASE_DIR, "models", "browser", "model_125_browser.pkl"),
+    250: os.path.join(BASE_DIR, "models", "browser", "model_250_browser.pkl"),
+    375: os.path.join(BASE_DIR, "models", "browser", "model_375_browser.pkl"),
+    500: os.path.join(BASE_DIR, "models", "browser", "self_ssvep_model_browser.pkl"),
 }
 
 

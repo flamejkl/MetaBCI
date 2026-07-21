@@ -17,7 +17,8 @@ L_FREQ = 8
 H_FREQ = 30
 
 # ========== 模型参数 ==========
-MODEL_PATH = os.path.join(BASE_DIR, "self_ssvep_model_browser.pkl")
+MODEL_DIR = os.path.join(BASE_DIR, "models", "browser")
+MODEL_PATH = os.path.join(MODEL_DIR, "self_ssvep_model_browser.pkl")
 
 # ========== 动态停止参数 ==========
 DYNAMIC_STOPPING_WINDOWS = [0.4, 0.6, 0.8, 1.0]
@@ -52,10 +53,10 @@ OFFLINE_TIMEOUT_DELAY = 1.0
 
 # ========== Growing Window 动态停止参数 ==========
 GW_MODEL_PATHS = {
-    125: os.path.join(BASE_DIR, "model_125_browser.pkl"),
-    250: os.path.join(BASE_DIR, "model_250_browser.pkl"),
-    375: os.path.join(BASE_DIR, "model_375_browser.pkl"),
-    500: os.path.join(BASE_DIR, "self_ssvep_model_browser.pkl")
+    125: os.path.join(MODEL_DIR, "model_125_browser.pkl"),
+    250: os.path.join(MODEL_DIR, "model_250_browser.pkl"),
+    375: os.path.join(MODEL_DIR, "model_375_browser.pkl"),
+    500: os.path.join(MODEL_DIR, "self_ssvep_model_browser.pkl")
 }
 GW_CHECK_STEP = 25          # 检测步长（采样点），25 = 100ms
 GW_MIN_LENGTH = 125         # 0.5s 开始检测
