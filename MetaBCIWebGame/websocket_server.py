@@ -478,6 +478,8 @@ class WebSocketServer:
                                 "diag_acc_pct": round(diag_acc, 1),
                                 "diag_total": self._diag_total,
                             }))
+                            # 停止闪烁，给被试休息时间
+                            await self._broadcast_stim({"type": "stim_stop"})
                             continue  # 跳过引擎流程
                         else:
                             self.engine.request_reset()
