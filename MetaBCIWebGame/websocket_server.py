@@ -386,13 +386,14 @@ class WebSocketServer:
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # ====== 固定2.0s窗口(W=500)在线解码 ======
+                            # ====== Growing Window 动态停止在线解码 ======
                             import time as _time
-                            W = 500
-                            model = self.gw_decoder.models[W]
+                            WINDOWS = [125, 250, 375, 500]  # 0.5/1.0/1.5/2.0秒
+                            MARGIN_TH = 0.10  # 放松阈值—离线伪在线最佳平衡点
+                            MAX_TH = 0.35
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
-                            # 1) 动态检测Trigger（同collect_step逻辑）
+                            # 1) 动态检测Trigger
                             start = self.acq.get_sample_count()
                             deadline = _time.time() + 5.0
                             full = None
@@ -410,62 +411,55 @@ class WebSocketServer:
                                     if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
                                         onset = i + 1
                                         break
-                                if onset > 0 and onset + W <= full.shape[1]:
+                                if onset > 0 and onset + max(WINDOWS) <= full.shape[1]:
                                     break
 
-                            t_uniq = np.unique(trigger_ch[:100]) if trigger_ch is not None else []
-                            if onset == 0 or full is None or onset + W > full.shape[1]:
-                                onset = 0
+                            if onset == 0 or full is None or onset + max(WINDOWS) > full.shape[1]:
                                 self._diag_trigger_miss += 1
-                                total = full.shape[1] if full is not None else 0
-                                log(f"[DIAG] ⚠️ 未检测到Trigger跳变! "
-                                    f"前100点唯一值={t_uniq.tolist()}, 总长={total}")
-                                if full is None:
-                                    await websocket.send(json.dumps({"type": "eval_result", "decoded": "error",
-                                        "expected": expected_dir, "match": False, "confidence": 0,
-                                        "decision_time": 2.0, "early": False, "window_ms": 2000}))
-                                    continue
-                            else:
-                                log(f"[DIAG] ✓ Trigger onset={onset}, "
-                                    f"前100点唯一值={t_uniq.tolist()}, "
-                                    f"跳变: {trigger_ch[onset-1]:.1f}→{trigger_ch[onset]:.1f}")
+                                log(f"[GW] ⚠️ Trigger失败 onset={onset}")
+                                err = {"type":"eval_result","decoded":"error","expected":expected_dir,
+                                    "match":False,"confidence":0,"decision_time":2.0,"early":False,"window_ms":2000}
+                                await websocket.send(json.dumps(err))
+                                continue
+                            log(f"[GW] ✓ Trigger onset={onset}")
 
-                            # 2) 提取数据 + 预处理（对齐训练）
-                            raw = full[self.acq.channel_indices, onset:onset + W]
-                            trial = raw.astype(np.float64)
-                            trial = trial[occ_idx, :]                    # 枕区8通道
-                            trial = trial - np.mean(trial, axis=1, keepdims=True)
+                            # 2) 提取全窗口 + 预处理
+                            raw = full[self.acq.channel_indices, onset:onset + max(WINDOWS)]
+                            raw = raw.astype(np.float64)
+                            raw = raw[occ_idx, :]
+                            raw = raw - np.mean(raw, axis=1, keepdims=True)
 
-                            # 3) 数据质量日志
-                            if self._diag_total % 10 == 1:
-                                ch_std = np.std(trial, axis=1)
-                                log(f"[DIAG] EEG质量: 幅值范围=[{trial.min():.1f},{trial.max():.1f}], "
-                                    f"通道std={[f'{s:.1f}' for s in ch_std]}")
+                            # 3) 渐进窗口预测
+                            decision = None; conf = 0.0; margin = 0.0; dec_t = 2.0
+                            for L in WINDOWS:
+                                trial = raw[:, :L]
+                                model = self.gw_decoder.models[L]
+                                scores = model.transform(trial[np.newaxis, ...])[0]
+                                top2 = np.partition(scores, -2)[-2:]
+                                margin = float(top2.max() - top2.min())
+                                conf = float(np.max(scores))
+                                decision = int(np.argmax(scores))
+                                if margin > MARGIN_TH and conf > MAX_TH:
+                                    dec_t = L / 250.0
+                                    break
+                                dec_t = L / 250.0  # 未触发提前停止，继续
 
-                            # 4) 预测 + 真实置信度
-                            scores = model.transform(trial[np.newaxis, ...])[0]
-                            decision = int(np.argmax(scores))
-                            conf = float(np.max(scores))
-                            # margin: top1 vs top2 差距
-                            top2 = np.partition(scores, -2)[-2:]
-                            margin = float(top2.max() - top2.min())
-
-                            dec_t = W / 250.0
+                            # 4) 结果
                             decoded_dir = ["up", "down", "left", "right"][decision]
                             match = (decoded_dir == expected_dir)
+                            early = float(dec_t) < 2.0
 
-                            # 5) 累计统计
+                            # 5) 统计
                             self._diag_total += 1
                             if match:
                                 self._diag_correct += 1
                             diag_acc = self._diag_correct / self._diag_total * 100
                             miss_rate = self._diag_trigger_miss / self._diag_total * 100
 
-                            log(f"[DIAG] #{self._diag_total} 目标={expected_dir} "
+                            log(f"[GW] #{self._diag_total} 目标={expected_dir} "
                                 f"解码={decoded_dir} {'✓' if match else '✗'} "
-                                f"conf={conf:.3f} margin={margin:.3f} "
-                                f"累计准确率={diag_acc:.1f}% ({self._diag_correct}/{self._diag_total}) "
-                                f"Trigger丢失率={miss_rate:.1f}%")
+                                f"窗口={int(dec_t*1000)}ms conf={conf:.3f} margin={margin:.3f} "
+                                f"累计={diag_acc:.1f}% early={early}")
 
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
@@ -473,7 +467,7 @@ class WebSocketServer:
                                 "confidence": round(float(conf), 3),
                                 "margin": round(margin, 3),
                                 "decision_time": round(float(dec_t), 3),
-                                "early": float(dec_t) < 2.0,
+                                "early": early,
                                 "window_ms": int(float(dec_t) * 1000),
                                 "diag_acc_pct": round(diag_acc, 1),
                                 "diag_total": self._diag_total,
