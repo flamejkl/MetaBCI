@@ -274,8 +274,10 @@ class WebSocketServer:
         MARGIN_TH = 0.10
         MAX_TH = 0.35
         occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
-        while self._realtime_active and self.acq:
+        while self._realtime_active and self.acq is not None:
             try:
+                if self.acq is None or not self._realtime_active:
+                    break
                 # 启动闪烁
                 await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
                 if hasattr(self, '_skip_stale') and self._skip_stale:
@@ -285,7 +287,7 @@ class WebSocketServer:
                 start = self.acq.get_sample_count()
                 deadline = _time.time() + 5.0
                 onset = 0
-                while _time.time() < deadline and self._realtime_active:
+                while _time.time() < deadline and self._realtime_active and self.acq is not None:
                     await asyncio.sleep(0.05)
                     end = self.acq.get_sample_count()
                     if end - start < 200:
@@ -308,14 +310,16 @@ class WebSocketServer:
                 # 渐进窗口解码
                 decision = None; conf = 0.0; dec_t = 2.0
                 for L in WINDOWS:
-                    if not self._realtime_active:
+                    if not self._realtime_active or self.acq is None:
                         break
-                    while _time.time() < deadline:
+                    while _time.time() < deadline and self.acq is not None:
                         with self.acq._lock:
                             cur_len = len(self.acq.eeg_buffer)
                         if cur_len >= trigger_abs + L:
                             break
                         await asyncio.sleep(0.02)
+                    if self.acq is None or not self._realtime_active:
+                        break
                     with self.acq._lock:
                         trial = np.array(self.acq.eeg_buffer[trigger_abs:trigger_abs + L], dtype=np.float64).T
                     trial = trial[occ_idx, :]
