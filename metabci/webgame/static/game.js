@@ -1347,13 +1347,19 @@
             this._updateUI();
         }
 
-        // ---- game loop ----
+        // ---- game loop (SSVEP: 不自动移动, 仅渲染动画) ----
         _startLoop() {
             this._stopLoop();
-            this._tickTimer = setInterval(() => this._tick(), this.state.tickMs);
+            if (this._tickTimer) return;
+            const renderLoop = () => {
+                if (!this.state || !this.state.alive) { this._tickTimer = null; return; }
+                this.render(gameCtx);
+                this._tickTimer = requestAnimationFrame(renderLoop);
+            };
+            this._tickTimer = requestAnimationFrame(renderLoop);
         }
         _stopLoop() {
-            if (this._tickTimer) { clearInterval(this._tickTimer); this._tickTimer = null; }
+            if (this._tickTimer) { cancelAnimationFrame(this._tickTimer); this._tickTimer = null; }
         }
 
         _tick() {
@@ -1397,11 +1403,6 @@
                 s.score += 10;
                 s.growPending += 1;
                 this._spawnFood();
-                // Speed up slightly
-                if (s.tickMs > 120) {
-                    s.tickMs = Math.max(120, s.tickMs - 5);
-                    this._startLoop();  // restart timer with new interval
-                }
             } else if (s.growPending > 0) {
                 s.growPending--;
             } else {
@@ -1436,15 +1437,19 @@
             }, 2000);
         }
 
-        // ---- brain / keyboard input ----
+        // ---- brain / keyboard input (SSVEP: 每收到命令走一步, 不自动移动) ----
         handleMove(cmd) {
             const s = this.state;
             if (!s || !s.alive) return;
+            const valid = ['up', 'down', 'left', 'right'];
+            if (!valid.includes(cmd)) return;
             const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
             // Prevent 180° reversal
             if (cmd !== opposite[s.direction]) {
                 s.nextDirection = cmd;
             }
+            // SSVEP控制: 收到命令立即走一步 (不做自动tick)
+            this._tick();
         }
 
         // ---- rendering ----
