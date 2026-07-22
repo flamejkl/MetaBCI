@@ -164,3 +164,6 @@ log.txt
 *.pkl.bak
 *_new.pkl
 
+# Local Codex worktrees
+.worktrees/
+
