@@ -184,6 +184,7 @@ class WebSocketServer:
         self.gw_decoder = None
         self.acq = None
         self.offline_gen = None
+        self._realtime_active = False
 
         # 离线演示专用：当前试次生成器
         self._demo_gen = None
@@ -265,6 +266,93 @@ class WebSocketServer:
         self._demo_gen = None
         log("[STOP] 所有组件已停止")
 
+    # ========== 实时脑控自动循环 ==========
+    async def _realtime_loop(self):
+        """自动循环: Trigger检测 → GW解码 → 返回命令 → 短暂休息 → 下一个"""
+        import time as _time
+        WINDOWS = [125, 250, 375, 500]
+        MARGIN_TH = 0.10
+        MAX_TH = 0.35
+        occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
+        while self._realtime_active and self.acq:
+            try:
+                # 启动闪烁
+                await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                if hasattr(self, '_skip_stale') and self._skip_stale:
+                    self._skip_stale()
+
+                # Trigger检测
+                start = self.acq.get_sample_count()
+                deadline = _time.time() + 5.0
+                onset = 0
+                while _time.time() < deadline and self._realtime_active:
+                    await asyncio.sleep(0.05)
+                    end = self.acq.get_sample_count()
+                    if end - start < 200:
+                        continue
+                    with self.acq._lock_full:
+                        full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                    trigger_ch = full[-1, :]
+                    for i in range(len(trigger_ch) - 1):
+                        if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                            onset = i + 1
+                            break
+                    if onset > 0:
+                        break
+
+                if onset == 0 or not self._realtime_active:
+                    await self._broadcast_stim({"type": "stim_stop"})
+                    continue
+                trigger_abs = start + onset
+
+                # 渐进窗口解码
+                decision = None; conf = 0.0; dec_t = 2.0
+                for L in WINDOWS:
+                    if not self._realtime_active:
+                        break
+                    while _time.time() < deadline:
+                        with self.acq._lock:
+                            cur_len = len(self.acq.eeg_buffer)
+                        if cur_len >= trigger_abs + L:
+                            break
+                        await asyncio.sleep(0.02)
+                    with self.acq._lock:
+                        trial = np.array(self.acq.eeg_buffer[trigger_abs:trigger_abs + L], dtype=np.float64).T
+                    trial = trial[occ_idx, :]
+                    trial = trial - np.mean(trial, axis=1, keepdims=True)
+                    model = self.gw_decoder.models[L]
+                    scores = model.transform(trial[np.newaxis, ...])[0]
+                    top2 = np.partition(scores, -2)[-2:]
+                    margin = float(top2.max() - top2.min())
+                    conf = float(np.max(scores))
+                    decision = int(np.argmax(scores))
+                    dec_t = L / 250.0
+                    if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
+                        break
+
+                command = ["up", "down", "left", "right"][decision]
+                log(f"[CTRL] 解码={command} 窗口={int(dec_t*1000)}ms conf={conf:.3f}")
+                await self._send_ws_safe({
+                    "type": "realtime_command", "command": command,
+                    "confidence": round(float(conf), 3),
+                    "window_ms": int(float(dec_t) * 1000),
+                })
+                await self._broadcast_stim({"type": "stim_stop"})
+                # 短暂休息再下一轮
+                await asyncio.sleep(0.8)
+            except Exception:
+                traceback.print_exc()
+                await self._broadcast_stim({"type": "stim_stop"})
+                await asyncio.sleep(1.0)
+
+    async def _send_ws_safe(self, data):
+        """安全广播：向所有客户端发送消息。"""
+        for client in list(self.clients):
+            try:
+                await client.send(json.dumps(data))
+            except Exception:
+                pass
+
     # ========== 离线演示数据源回调（修改：返回三元组） ==========
     def _get_demo_sample(self):
         """
@@ -302,7 +390,7 @@ class WebSocketServer:
                         continue
 
                     # ---------- 停止命令 ----------
-                    if msg_type in ("stop_demo", "stop_eval", "stop_realtime"):
+                    if msg_type in ("stop_demo", "stop_eval"):
                         await self._stop_all()
                         await self._broadcast_stim({"type": "stim_stop"})
                         await websocket.send(json.dumps({"type": "status", "status": "stopped"}))
@@ -623,28 +711,34 @@ class WebSocketServer:
                         await websocket.send(json.dumps({"type": "collect_stopped", "total": total}))
                         continue
 
-                    # ---------- 实时脑控启动 ----------
+                    # ---------- 实时脑控启动（自动循环解码）----------
                     if msg_type == "start_realtime":
                         log("[HANDLER] 收到 start_realtime")
                         if self.mode != "online":
-                            await websocket.send(json.dumps({"error": "请先切换到在线模式"}))
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "请先切换到在线模式"}))
                             continue
                         await self._stop_all()
                         self._load_model_and_engine()
-                        if self.engine is None:
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "引擎初始化失败"}))
+                        if self.gw_decoder is None:
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "解码器初始化失败"}))
                             continue
-
                         if not self._connect_acq():
                             await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "EEG设备未连接"}))
                             continue
-
-                        next_fn, skip_stale = _make_next_acq_sample(self.acq)
-                        self._skip_stale = skip_stale
-                        self.engine.data_source_callback = next_fn
-                        self.engine.set_mode(ContinuousStreamingEngine.State.REALTIME)
-                        await self.engine.start()
+                        self._realtime_active = True
+                        await self._broadcast_stim({"type": "stim_start"})
                         await websocket.send(json.dumps({"type": "realtime_status", "status": "started"}))
+                        # 启动自动循环
+                        asyncio.create_task(self._realtime_loop())
+                        log("[REALTIME] 脑控模式已启动")
+                        continue
+
+                    if msg_type == "stop_realtime":
+                        self._realtime_active = False
+                        await self._broadcast_stim({"type": "stim_stop"})
+                        await self._stop_all()
+                        await websocket.send(json.dumps({"type": "realtime_status", "status": "stopped"}))
+                        log("[REALTIME] 脑控模式已停止")
                         continue
 
                     # ---------- 其他消息 ----------
