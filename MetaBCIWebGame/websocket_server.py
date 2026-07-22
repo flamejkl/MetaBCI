@@ -388,19 +388,19 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
                             # ====== Growing Window 动态停止在线解码 ======
                             import time as _time
-                            WINDOWS = [125, 250, 375, 500]  # 采样点
+                            WINDOWS = [125, 250, 375, 500]
                             MARGIN_TH = 0.10
                             MAX_TH = 0.35
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
-                            # 1) 动态等待Trigger
+                            # 1) 检测Trigger（用_lock_full读trigger通道）
                             start = self.acq.get_sample_count()
                             deadline = _time.time() + 5.0
                             onset = 0
                             while _time.time() < deadline:
                                 await asyncio.sleep(0.05)
                                 end = self.acq.get_sample_count()
-                                if end - start < 50:
+                                if end - start < 200:
                                     continue
                                 with self.acq._lock_full:
                                     full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
@@ -411,6 +411,7 @@ class WebSocketServer:
                                         break
                                 if onset > 0:
                                     break
+                            trigger_abs = start + onset
 
                             if onset == 0:
                                 self._diag_trigger_miss += 1
@@ -419,30 +420,27 @@ class WebSocketServer:
                                     "expected":expected_dir,"match":False,"confidence":0,
                                     "decision_time":2.0,"early":False,"window_ms":2000}))
                                 continue
-                            trigger_abs = start + onset  # Trigger的绝对采样点
 
-                            log(f"[GW] ✓ Trigger onset={onset}, 开始渐进解码...")
+                            log(f"[GW] ✓ Trigger onset={onset}")
 
-                            # 2) 渐进窗口: Trigger一够就试，不够再等
+                            # 2) 渐进窗口: 用_lock读eeg_buffer(不阻塞_lock_full写!)
                             decision = None; conf = 0.0; margin = 0.0; dec_t = 2.0
                             for L in WINDOWS:
-                                # 等到Trigger后有L个采样点
+                                # 等到目标通道buffer有L个采样点(trigger_abs+L)
                                 while _time.time() < deadline:
-                                    cur = self.acq.get_sample_count()
-                                    if cur - trigger_abs >= L:
+                                    with self.acq._lock:
+                                        cur_len = len(self.acq.eeg_buffer)
+                                    if cur_len >= trigger_abs + L:
                                         break
                                     await asyncio.sleep(0.02)
-                                # 提取窗口
-                                with self.acq._lock_full:
-                                    full = np.array(
-                                        self.acq.eeg_buffer_full[trigger_abs:trigger_abs + L],
+                                # 用_lock读(与_lock_full独立, 不阻塞数据采集)
+                                with self.acq._lock:
+                                    trial = np.array(
+                                        self.acq.eeg_buffer[trigger_abs:trigger_abs + L],
                                         dtype=np.float64).T
-                                trial = full[self.acq.channel_indices, :]
-                                trial = trial.astype(np.float64)
                                 trial = trial[occ_idx, :]
                                 trial = trial - np.mean(trial, axis=1, keepdims=True)
 
-                                # 预测
                                 model = self.gw_decoder.models[L]
                                 scores = model.transform(trial[np.newaxis, ...])[0]
                                 top2 = np.partition(scores, -2)[-2:]
@@ -450,10 +448,8 @@ class WebSocketServer:
                                 conf = float(np.max(scores))
                                 decision = int(np.argmax(scores))
                                 dec_t = L / 250.0
-
-                                # 检查是否可提前停止
                                 if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
-                                    break  # 提前停止!
+                                    break  # 提前停止
 
                             # 3) 结果
                             decoded_dir = ["up", "down", "left", "right"][decision]
