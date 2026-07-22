@@ -274,6 +274,7 @@ class WebSocketServer:
         MARGIN_TH = 0.10
         MAX_TH = 0.35
         occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
+        realtime_stats = {"up":0,"down":0,"left":0,"right":0,"early":0,"total":0}
         while self._realtime_active and self.acq is not None:
             try:
                 if self.acq is None or not self._realtime_active:
@@ -335,7 +336,14 @@ class WebSocketServer:
                         break
 
                 command = ["up", "down", "left", "right"][decision]
-                log(f"[CTRL] 解码={command} 窗口={int(dec_t*1000)}ms conf={conf:.3f}")
+                realtime_stats[command] += 1
+                realtime_stats["total"] += 1
+                if dec_t < 2.0:
+                    realtime_stats["early"] += 1
+                early_rate = realtime_stats["early"] / realtime_stats["total"] * 100
+                log(f"[CTRL] 解码={command} 窗口={int(dec_t*1000)}ms conf={conf:.3f} "
+                    f"分布={dict({k:v for k,v in realtime_stats.items() if k not in ('early','total')})} "
+                    f"提前={early_rate:.0f}%")
                 await self._send_ws_safe({
                     "type": "realtime_command", "command": command,
                     "confidence": round(float(conf), 3),
