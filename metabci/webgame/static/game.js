@@ -1588,8 +1588,8 @@
             const laneCenters = [0, 1, 2, 3].map(i => roadLeft + laneW * (i + 0.5));
             this.state = {
                 roadLeft, roadRight, roadW, laneW, laneCenters,
-                lane: 1, targetLane: 1,
-                speed: 200, baseSpeed: 200, maxSpeed: 450, minSpeed: 80,
+                lane: 1,
+                speed: 80, baseSpeed: 80, maxSpeed: 450, minSpeed: 80,
                 accelAmount: 40, brakeAmount: 50,
                 score: 0, distance: 0, alive: true,
                 obstacles: [], obstacleTimer: 0, obstacleInterval: 1.0,
@@ -1621,15 +1621,8 @@
             const dt = Math.min((now - this._lastTime) / 1000, 0.1);
             this._lastTime = now;
 
-            // Smooth lane transition
-            const carX = s.laneCenters[s.lane];
-            const targetX = s.laneCenters[s.targetLane];
-            const diff = targetX - carX;
-            if (Math.abs(diff) > 0.5) {
-                s.laneCenters[s.lane] = carX + diff * Math.min(8 * dt, 1);
-            } else {
-                s.lane = s.targetLane;
-            }
+            // Instant lane switch (discrete control)
+            s.lane = s.targetLane;
 
             // ---- forward movement ----
             s.distance += s.speed * dt;
@@ -1677,8 +1670,8 @@
             const s = this.state;
             if (!s || !s.alive) return;
             switch (cmd) {
-                case 'left':  s.targetLane = Math.max(0, s.targetLane - 1); break;
-                case 'right': s.targetLane = Math.min(3, s.targetLane + 1); break;
+                case 'left':  s.lane = Math.max(0, s.lane - 1); break;
+                case 'right': s.lane = Math.min(3, s.lane + 1); break;
                 case 'up':    s.speed = Math.min(s.maxSpeed, s.speed + s.accelAmount); break;
                 case 'down':  s.speed = Math.max(s.minSpeed, s.speed - s.brakeAmount); break;
             }
