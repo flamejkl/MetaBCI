@@ -1580,8 +1580,8 @@
             this._stopLoop();
             const w = gameCanvas.width;
             const h = gameCanvas.height;
-            const roadLeft = w * 0.12;
-            const roadRight = w * 0.88;
+            const roadLeft = w * 0.05;
+            const roadRight = w * 0.95;
 
             const roadW = roadRight - roadLeft;
             const laneW = roadW / 4;
@@ -1593,7 +1593,7 @@
                 accelAmount: 40, brakeAmount: 50,
                 score: 0, distance: 0, alive: true,
                 obstacles: [], obstacleTimer: 0, obstacleInterval: 1.0,
-                roadOffset: 0, carW: laneW * 0.7, carH: 80,
+                roadOffset: 0, carW: 60, carH: 80,
             };
             this._gameOver = false;
             this._lastTime = performance.now();
