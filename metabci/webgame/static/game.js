@@ -1621,9 +1621,6 @@
             const dt = Math.min((now - this._lastTime) / 1000, 0.1);
             this._lastTime = now;
 
-            // Instant lane switch (discrete control)
-            s.lane = s.targetLane;
-
             // ---- forward movement ----
             s.distance += s.speed * dt;
             s.score = Math.floor(s.distance / 10);
