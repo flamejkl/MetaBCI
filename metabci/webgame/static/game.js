@@ -1592,7 +1592,7 @@
                 speed: 80, baseSpeed: 80, maxSpeed: 450, minSpeed: 80,
                 accelAmount: 40, brakeAmount: 50,
                 score: 0, distance: 0, alive: true,
-                obstacles: [], obstacleTimer: 0, obstacleInterval: 1.0,
+                obstacles: [], obstacleTimer: 0, obstacleInterval: 2.0,
                 roadOffset: 0, carW: 60, carH: 80,
             };
             this._gameOver = false;
@@ -1630,7 +1630,7 @@
             s.obstacleTimer += dt;
             if (s.obstacleTimer >= s.obstacleInterval) {
                 s.obstacleTimer = 0;
-                s.obstacleInterval = 0.6 + Math.random() * 1.5 / Math.min(s.speed / s.baseSpeed, 2.5);
+                s.obstacleInterval = 1.5 + Math.random() * 2.0 / Math.min(s.speed / s.baseSpeed, 2.5);
                 this._spawnObstacle();
             }
             for (let obs of s.obstacles) obs.y += s.speed * dt;
