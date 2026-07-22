@@ -15,6 +15,7 @@ from metabci.brainda.algorithms.decomposition.base import generate_filterbank, g
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 MODEL_DIR = os.path.join(BASE_DIR, "models", "browser_new")  # 新session模型，不与旧模型混用
+os.makedirs(MODEL_DIR, exist_ok=True)
 TARGET_FREQS = [8.25, 11.0, 13.75, 16.5]
 WINDOW_SAMPLES = 500
 SAMPLE_RATE = 250
