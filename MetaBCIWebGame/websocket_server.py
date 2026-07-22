@@ -576,39 +576,33 @@ class WebSocketServer:
                             await asyncio.sleep(1.0)
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
 
-                        # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
+                        # 记录起点，轮询等待—Trigger可能延迟到达
                         start = self.acq.get_sample_count()
                         import time as _time
-                        deadline = _time.time() + 2.5
-                        while True:
+                        deadline = _time.time() + 5.0
+                        full = None
+                        trigger_ch = None
+                        onset = 0
+                        while _time.time() < deadline:
                             await asyncio.sleep(0.05)
                             end = self.acq.get_sample_count()
-                            if end - start >= 800:  # 多等一些给trigger检测余量
-                                break
-                            if _time.time() > deadline:
-                                break
-                        if end - start < 500:
-                            log(f"[COLLECT] 数据不足: start={start} end={end}")
-                            await websocket.send(json.dumps({"type": "collect_error", "message": "数据不足"}))
-                            continue
-                        # 用 Trigger 通道精确定位试次起点（对齐离线实验）
-                        with self.acq._lock_full:
-                            full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
-                        trigger_ch = full[-1, :]
-                        # 调试：打印 Trigger 通道前10个值
-                        uniq = np.unique(trigger_ch)
-                        log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
-                        onset = 0
-                        for i in range(len(trigger_ch) - 1):
-                            if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
-                                onset = i + 1
-                                break
-                        if onset == 0:
-                            log(f"[COLLECT] 未检测到Trigger跳变，使用buffer起点")
-                        if onset + 500 > full.shape[1]:
-                            log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1]}")
+                            if end - start < 200:  # 数据还不够，继续等
+                                continue
+                            with self.acq._lock_full:
+                                full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                            trigger_ch = full[-1, :]
+                            for i in range(len(trigger_ch) - 1):
+                                if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                                    onset = i + 1
+                                    break
+                            if onset > 0 and onset + 500 <= full.shape[1]:
+                                break  # 找到Trigger且数据够
+                        if onset == 0 or onset + 500 > full.shape[1]:
+                            log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1] if full is not None else 'N/A'}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据长度不足"}))
                             continue
+                        uniq = np.unique(trigger_ch[:100])
+                        log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, onset={onset}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
                         # 提取目标通道+Trigger (对齐离线实验: 14EEG + Trigger)
                         ch_idx = self.acq.channel_indices + [64]
                         raw = full[ch_idx, onset:onset + 500]  # (15, 500)
