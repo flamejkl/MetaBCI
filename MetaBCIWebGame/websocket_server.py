@@ -386,66 +386,63 @@ class WebSocketServer:
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # ====== 固定0.5s(125点)诊断测试 ======
+                            # ====== 固定2.0s窗口(W=500)在线解码 ======
                             import time as _time
-                            W = 500  # 测试2.0s窗口—最强模型
+                            W = 500
                             model = self.gw_decoder.models[W]
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
-                            # 1) 等2.5秒采集数据 (500点需要2秒+余量)
+                            # 1) 动态检测Trigger（同collect_step逻辑）
                             start = self.acq.get_sample_count()
-                            await asyncio.sleep(2.5)
-                            end = self.acq.get_sample_count()
-
-                            # 2) 从全通道buffer提取
-                            with self.acq._lock_full:
-                                full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
-                            trigger_ch = full[-1, :]
-
-                            # 3) Trigger上升沿检测 + 详细日志
-                            t_uniq = np.unique(trigger_ch[:min(50, len(trigger_ch))])
+                            deadline = _time.time() + 5.0
+                            full = None
+                            trigger_ch = None
                             onset = 0
-                            for i in range(len(trigger_ch) - 1):
-                                if trigger_ch[i] < 0.5 and trigger_ch[i + 1] >= 0.5:
-                                    onset = i + 1
+                            while _time.time() < deadline:
+                                await asyncio.sleep(0.05)
+                                end = self.acq.get_sample_count()
+                                if end - start < 200:
+                                    continue
+                                with self.acq._lock_full:
+                                    full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                                trigger_ch = full[-1, :]
+                                for i in range(len(trigger_ch) - 1):
+                                    if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                                        onset = i + 1
+                                        break
+                                if onset > 0 and onset + W <= full.shape[1]:
                                     break
 
-                            if onset == 0 or onset + W > full.shape[1]:
+                            t_uniq = np.unique(trigger_ch[:100]) if trigger_ch is not None else []
+                            if onset == 0 or full is None or onset + W > full.shape[1]:
                                 onset = 0
                                 self._diag_trigger_miss += 1
+                                total = full.shape[1] if full is not None else 0
                                 log(f"[DIAG] ⚠️ 未检测到Trigger跳变! "
-                                    f"前50点唯一值={t_uniq.tolist()}, "
-                                    f"范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}], "
-                                    f"总长={len(trigger_ch)}")
+                                    f"前100点唯一值={t_uniq.tolist()}, 总长={total}")
+                                if full is None:
+                                    await websocket.send(json.dumps({"type": "eval_result", "decoded": "error",
+                                        "expected": expected_dir, "match": False, "confidence": 0,
+                                        "decision_time": 2.0, "early": False, "window_ms": 2000}))
+                                    continue
                             else:
                                 log(f"[DIAG] ✓ Trigger onset={onset}, "
-                                    f"前50点唯一值={t_uniq.tolist()}, "
+                                    f"前100点唯一值={t_uniq.tolist()}, "
                                     f"跳变: {trigger_ch[onset-1]:.1f}→{trigger_ch[onset]:.1f}")
 
-                            # 4) 提取数据 + 预处理（对齐训练）
+                            # 2) 提取数据 + 预处理（对齐训练）
                             raw = full[self.acq.channel_indices, onset:onset + W]
                             trial = raw.astype(np.float64)
                             trial = trial[occ_idx, :]                    # 枕区8通道
-                            # FIX: POz(索引7)训练时std=0(死通道), 在线必须归零对齐训练分布
-                            trial[7, :] = 0.0
                             trial = trial - np.mean(trial, axis=1, keepdims=True)
 
-                            # 4.5) 数据质量日志（每10次打印一次）
+                            # 3) 数据质量日志
                             if self._diag_total % 10 == 1:
                                 ch_std = np.std(trial, axis=1)
                                 log(f"[DIAG] EEG质量: 幅值范围=[{trial.min():.1f},{trial.max():.1f}], "
                                     f"通道std={[f'{s:.1f}' for s in ch_std]}")
 
-                            # 4.6) 保存前10个试次到文件（用于离线对比验证）
-                            if self._diag_total <= 10:
-                                dump_dir = os.path.join(BASE_DIR, 'data_self_test')
-                                os.makedirs(dump_dir, exist_ok=True)
-                                dump_path = os.path.join(dump_dir, f'online_diag_{self._diag_total:04d}.npy')
-                                np.save(dump_path, trial)
-                                if self._diag_total == 0:
-                                    log(f"[DIAG] 数据样例保存到: {dump_dir}/online_diag_XXXX.npy")
-
-                            # 5) 预测 + 真实置信度
+                            # 4) 预测 + 真实置信度
                             scores = model.transform(trial[np.newaxis, ...])[0]
                             decision = int(np.argmax(scores))
                             conf = float(np.max(scores))
@@ -457,7 +454,7 @@ class WebSocketServer:
                             decoded_dir = ["up", "down", "left", "right"][decision]
                             match = (decoded_dir == expected_dir)
 
-                            # 6) 累计统计
+                            # 5) 累计统计
                             self._diag_total += 1
                             if match:
                                 self._diag_correct += 1
