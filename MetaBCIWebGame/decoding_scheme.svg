@@ -1,145 +1,151 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080" font-family="Microsoft YaHei, sans-serif">
-  <defs>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="3" result="blur"/>
-      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
-    </filter>
-  </defs>
-
   <!-- Background -->
   <rect width="1920" height="1080" fill="#080b1e"/>
 
   <!-- Title -->
-  <text x="80" y="65" font-size="42" font-weight="700" fill="#f0f4ff">解码方案</text>
-  <text x="350" y="65" font-size="22" fill="#647090">/ Decoding Scheme</text>
-  <text x="80" y="105" font-size="18" fill="#7b8db0">基于 MetaBCI brainda 模块 · FBTDCA 多频空间解码</text>
-  <line x1="80" y1="120" x2="1840" y2="120" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1"/>
+  <text x="80" y="60" font-size="38" font-weight="700" fill="#f0f4ff">解码方案</text>
+  <text x="320" y="60" font-size="20" fill="#647090">/ Decoding Scheme</text>
+  <text x="80" y="100" font-size="17" fill="#7b8db0">基于 MetaBCI brainda 模块 · FBTDCA 多频空间解码</text>
+  <line x1="80" y1="112" x2="1840" y2="112" stroke="#ffffff" stroke-opacity="0.08" stroke-width="1"/>
 
   <!-- ===== LEFT: Pipeline ===== -->
-  <rect x="80" y="155" width="900" height="800" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
-  <text x="120" y="200" font-size="22" font-weight="600" fill="#d0d8f0">算法流程</text>
+  <rect x="80" y="140" width="580" height="810" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
+  <text x="120" y="185" font-size="20" font-weight="600" fill="#d0d8f0">算法流程 ① 训练</text>
 
-  <!-- Pipeline boxes -->
-  <g transform="translate(120, 240)">
-    <!-- Box 1 -->
-    <rect x="0" y="0" width="140" height="100" rx="12" fill="#4facfe" fill-opacity="0.15" stroke="#4facfe" stroke-opacity="0.4"/>
-    <text x="70" y="42" text-anchor="middle" font-size="16" fill="#e8ecf4">EEG信号</text>
-    <text x="70" y="68" text-anchor="middle" font-size="13" fill="#8899bb">14通道 250Hz</text>
-    <!-- Arrow -->
-    <line x1="148" y1="50" x2="180" y2="50" stroke="#fff" stroke-opacity="0.15" stroke-width="2"/>
-    <polygon points="178,44 190,50 178,56" fill="#fff" fill-opacity="0.2"/>
+  <!-- Training flow -->
+  <g transform="translate(120, 215)">
+    <rect x="0" y="0" width="500" height="36" rx="6" fill="#4facfe" fill-opacity="0.08"/>
+    <text x="250" y="23" text-anchor="middle" font-size="15" fill="#bcc4d8">采集校准数据 → 4类×40试次 → 5折交叉验证</text>
+    <rect x="0" y="44" width="500" height="36" rx="6" fill="#43e97b" fill-opacity="0.08"/>
+    <text x="250" y="67" text-anchor="middle" font-size="15" fill="#bcc4d8">五子带滤波器组 → 每子带训练 TDCA 空间滤波器 W(8×8)</text>
+    <rect x="0" y="88" width="500" height="36" rx="6" fill="#ff9800" fill-opacity="0.08"/>
+    <text x="250" y="111" text-anchor="middle" font-size="15" fill="#bcc4d8">四个窗口各训一个模型: 125 / 250 / 375 / 500 点</text>
+    <rect x="0" y="132" width="500" height="36" rx="6" fill="#f093fb" fill-opacity="0.08"/>
+    <text x="250" y="155" text-anchor="middle" font-size="15" fill="#bcc4d8">输出: 4方向得分 → 最大相关度 = 解码方向</text>
+  </g>
 
-    <!-- Box 2 -->
-    <rect x="198" y="0" width="140" height="100" rx="12" fill="#43e97b" fill-opacity="0.15" stroke="#43e97b" stroke-opacity="0.4"/>
-    <text x="268" y="42" text-anchor="middle" font-size="16" fill="#e8ecf4">五子带</text>
-    <text x="268" y="68" text-anchor="middle" font-size="13" fill="#8899bb">滤波器组</text>
-    <!-- Arrow -->
-    <line x1="346" y1="50" x2="378" y2="50" stroke="#fff" stroke-opacity="0.15" stroke-width="2"/>
-    <polygon points="376,44 388,50 376,56" fill="#fff" fill-opacity="0.2"/>
-
-    <!-- Box 3 -->
-    <rect x="396" y="0" width="140" height="100" rx="12" fill="#ff9800" fill-opacity="0.15" stroke="#ff9800" stroke-opacity="0.4"/>
-    <text x="466" y="42" text-anchor="middle" font-size="16" fill="#e8ecf4">TDCA</text>
-    <text x="466" y="68" text-anchor="middle" font-size="13" fill="#8899bb">空间滤波 W(8×8)</text>
-    <!-- Arrow -->
-    <line x1="544" y1="50" x2="576" y2="50" stroke="#fff" stroke-opacity="0.15" stroke-width="2"/>
-    <polygon points="574,44 586,50 574,56" fill="#fff" fill-opacity="0.2"/>
-
-    <!-- Box 4 -->
-    <rect x="594" y="0" width="140" height="100" rx="12" fill="#f093fb" fill-opacity="0.15" stroke="#f093fb" stroke-opacity="0.4"/>
-    <text x="664" y="42" text-anchor="middle" font-size="16" fill="#e8ecf4">模板相关</text>
-    <text x="664" y="68" text-anchor="middle" font-size="13" fill="#8899bb">四方向得分</text>
-    <!-- Arrow -->
-    <line x1="742" y1="50" x2="774" y2="50" stroke="#fff" stroke-opacity="0.15" stroke-width="2"/>
-    <polygon points="772,44 784,50 772,56" fill="#fff" fill-opacity="0.2"/>
-
-    <!-- Box 5 -->
-    <rect x="792" y="0" width="120" height="100" rx="12" fill="#ff7878" fill-opacity="0.15" stroke="#ff7878" stroke-opacity="0.4"/>
-    <text x="852" y="42" text-anchor="middle" font-size="16" fill="#e8ecf4">最大相关</text>
-    <text x="852" y="68" text-anchor="middle" font-size="13" fill="#8899bb">输出方向</text>
+  <!-- Online flow -->
+  <text x="120" y="455" font-size="20" font-weight="600" fill="#d0d8f0">在线流程 ② 实时解码</text>
+  <g transform="translate(120, 485)">
+    <rect x="0" y="0" width="500" height="44" rx="10" fill="#4facfe" fill-opacity="0.15" stroke="#4facfe" stroke-opacity="0.3"/>
+    <text x="250" y="27" text-anchor="middle" font-size="15" fill="#e8ecf4">EEG 流入 → 提取 8 枕区通道 → detrend</text>
+    <text x="265" y="54" font-size="12" fill="#4facfe">→</text>
+    <rect x="0" y="62" width="500" height="44" rx="10" fill="#43e97b" fill-opacity="0.15" stroke="#43e97b" stroke-opacity="0.3"/>
+    <text x="250" y="89" text-anchor="middle" font-size="15" fill="#e8ecf4">0.5s 到 → model_125 预测 → 检查置信度</text>
+    <text x="265" y="116" font-size="12" fill="#43e97b">↓ 不够</text>
+    <rect x="0" y="124" width="500" height="44" rx="10" fill="#ff9800" fill-opacity="0.15" stroke="#ff9800" stroke-opacity="0.3"/>
+    <text x="250" y="151" text-anchor="middle" font-size="15" fill="#e8ecf4">1.0s 到 → model_250 预测 → 检查置信度</text>
+    <text x="265" y="178" font-size="12" fill="#ff9800">↓ 不够</text>
+    <rect x="0" y="186" width="500" height="44" rx="10" fill="#f093fb" fill-opacity="0.15" stroke="#f093fb" stroke-opacity="0.3"/>
+    <text x="250" y="213" text-anchor="middle" font-size="15" fill="#e8ecf4">1.5s 到 → model_375 预测 → 检查置信度</text>
+    <text x="265" y="240" font-size="12" fill="#f093fb">↓ 不够</text>
+    <rect x="0" y="248" width="500" height="44" rx="10" fill="#ff7878" fill-opacity="0.15" stroke="#ff7878" stroke-opacity="0.3"/>
+    <text x="250" y="275" text-anchor="middle" font-size="15" fill="#e8ecf4">2.0s → model_500 强制输出</text>
   </g>
 
   <!-- Frequencies -->
-  <text x="120" y="410" font-size="17" fill="#aab4cc">目标频率与方向</text>
-  <g transform="translate(120, 425)">
-    <rect x="0" y="0" width="200" height="80" rx="10" fill="#4facfe" fill-opacity="0.08" stroke="#4facfe" stroke-opacity="0.3"/>
-    <text x="100" y="32" text-anchor="middle" font-size="17" font-weight="600" fill="#4facfe">↑ UP</text>
-    <text x="100" y="58" text-anchor="middle" font-size="14" fill="#8899bb">8.25 Hz</text>
+  <text x="120" y="830" font-size="16" fill="#7888a0" font-weight="600">目标频率:  ↑ 8.25Hz    ↓ 11.0Hz    ← 13.75Hz    → 16.5Hz</text>
 
-    <rect x="225" y="0" width="200" height="80" rx="10" fill="#43e97b" fill-opacity="0.08" stroke="#43e97b" stroke-opacity="0.3"/>
-    <text x="325" y="32" text-anchor="middle" font-size="17" font-weight="600" fill="#43e97b">↓ DOWN</text>
-    <text x="325" y="58" text-anchor="middle" font-size="14" fill="#8899bb">11.0 Hz</text>
+  <!-- ===== MIDDLE: Confidence + Margin explained ===== -->
+  <rect x="690" y="140" width="550" height="810" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
+  <text x="730" y="185" font-size="20" font-weight="600" fill="#d0d8f0">置信度 &amp; 边际阈值</text>
 
-    <rect x="450" y="0" width="200" height="80" rx="10" fill="#ff9800" fill-opacity="0.08" stroke="#ff9800" stroke-opacity="0.3"/>
-    <text x="550" y="32" text-anchor="middle" font-size="17" font-weight="600" fill="#ff9800">← LEFT</text>
-    <text x="550" y="58" text-anchor="middle" font-size="14" fill="#8899bb">13.75 Hz</text>
+  <!-- What is confidence -->
+  <text x="730" y="230" font-size="17" fill="#4facfe" font-weight="600">置信度 (Max Score)</text>
+  <rect x="730" y="248" width="470" height="56" rx="8" fill="#4facfe" fill-opacity="0.08"/>
+  <text x="750" y="270" font-size="14" fill="#bcc4d8">模型对四个方向各输出一个相关系数得分</text>
+  <text x="750" y="292" font-size="14" fill="#7b8db0">置信度 = 四个得分中的最大值 → 即模型认为最可能的方向</text>
 
-    <rect x="675" y="0" width="200" height="80" rx="10" fill="#f093fb" fill-opacity="0.08" stroke="#f093fb" stroke-opacity="0.3"/>
-    <text x="775" y="32" text-anchor="middle" font-size="17" font-weight="600" fill="#f093fb">→ RIGHT</text>
-    <text x="775" y="58" text-anchor="middle" font-size="14" fill="#8899bb">16.5 Hz</text>
+  <!-- Score example -->
+  <text x="730" y="340" font-size="15" fill="#aab4cc">得分示例:</text>
+  <g transform="translate(730, 355)">
+    <rect x="0" y="0" width="110" height="52" rx="6" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="55" y="20" text-anchor="middle" font-size="12" fill="#7888a0">↑ up</text>
+    <text x="55" y="42" text-anchor="middle" font-size="18" fill="#4facfe" font-weight="600">0.12</text>
+
+    <rect x="120" y="0" width="110" height="52" rx="6" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="175" y="20" text-anchor="middle" font-size="12" fill="#7888a0">↓ down</text>
+    <text x="175" y="42" text-anchor="middle" font-size="18" fill="#43e97b" font-weight="600">0.08</text>
+
+    <rect x="240" y="0" width="110" height="52" rx="6" fill="#ffffff" fill-opacity="0.04" stroke="#ffffff" stroke-opacity="0.12"/>
+    <text x="295" y="20" text-anchor="middle" font-size="12" fill="#7888a0">← left</text>
+    <text x="295" y="42" text-anchor="middle" font-size="18" fill="#ff9800" font-weight="600">0.03</text>
+
+    <rect x="360" y="0" width="110" height="52" rx="6" fill="#f093fb" fill-opacity="0.12" stroke="#f093fb" stroke-opacity="0.4"/>
+    <text x="415" y="20" text-anchor="middle" font-size="12" fill="#f093fb">→ right</text>
+    <text x="415" y="42" text-anchor="middle" font-size="18" fill="#f093fb" font-weight="600">0.65</text>
   </g>
 
-  <!-- Windows -->
-  <text x="120" y="565" font-size="17" fill="#aab4cc">时间窗口模型</text>
-  <g transform="translate(120, 580)">
-    <rect x="0" y="0" width="200" height="36" rx="8" fill="#ffffff" fill-opacity="0.06"/>
-    <text x="100" y="22" text-anchor="middle" font-size="15" fill="#bcc4d8">125 点 · 0.5s</text>
-    <rect x="225" y="0" width="200" height="36" rx="8" fill="#ffffff" fill-opacity="0.06"/>
-    <text x="325" y="22" text-anchor="middle" font-size="15" fill="#bcc4d8">250 点 · 1.0s</text>
-    <rect x="450" y="0" width="200" height="36" rx="8" fill="#ffffff" fill-opacity="0.06"/>
-    <text x="550" y="22" text-anchor="middle" font-size="15" fill="#bcc4d8">375 点 · 1.5s</text>
-    <rect x="675" y="0" width="200" height="36" rx="8" fill="#ffffff" fill-opacity="0.06"/>
-    <text x="775" y="22" text-anchor="middle" font-size="15" fill="#bcc4d8">500 点 · 2.0s</text>
+  <g transform="translate(730, 420)">
+    <text x="0" y="0" font-size="14" fill="#7b8db0">置信度 = <tspan font-weight="600" fill="#f093fb">0.65</tspan> → 模型认为方向是 <tspan font-weight="600" fill="#f093fb">right</tspan></text>
   </g>
 
-  <!-- Dynamic stop note -->
-  <text x="120" y="660" font-size="15" fill="#7888a0">动态停止规则: 逐级检查置信度 → margin (top1–top2) &gt; 0.10 且 max_score &gt; 0.35 → 提前输出</text>
+  <!-- What is margin -->
+  <text x="730" y="475" font-size="17" fill="#ff9800" font-weight="600">边际值 (Margin)</text>
+  <rect x="730" y="493" width="470" height="70" rx="8" fill="#ff9800" fill-opacity="0.08"/>
+  <text x="750" y="515" font-size="14" fill="#bcc4d8">边际 = 最高分 - 第二高分</text>
+  <text x="750" y="537" font-size="14" fill="#7b8db0">= top1 − top2 = 哪两个最高分的差距</text>
+  <text x="750" y="559" font-size="14" fill="#7b8db0">衡量"第一名是否明显领先"</text>
 
-  <!-- ===== RIGHT: Performance + Config ===== -->
-  <!-- Performance -->
-  <rect x="1020" y="155" width="820" height="380" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
-  <text x="1060" y="200" font-size="22" font-weight="600" fill="#d0d8f0">性能指标</text>
-
-  <g transform="translate(1060, 225)">
-    <text x="0" y="0" font-size="16" fill="#aab4cc">离线准确率</text>
-    <rect x="0" y="15" width="370" height="34" rx="6" fill="#4facfe" fill-opacity="0.08" stroke="#4facfe" stroke-opacity="0.2"/>
-    <text x="14" y="37" font-size="15" fill="#bcc4d8">2.0s 窗口</text>
-    <text x="356" y="37" text-anchor="end" font-size="15" font-weight="600" fill="#4facfe">100%</text>
-    <rect x="0" y="55" width="370" height="34" rx="6" fill="#43e97b" fill-opacity="0.08" stroke="#43e97b" stroke-opacity="0.2"/>
-    <text x="14" y="77" font-size="15" fill="#bcc4d8">1.0s 窗口</text>
-    <text x="356" y="77" text-anchor="end" font-size="15" font-weight="600" fill="#43e97b">98.8%</text>
-    <rect x="0" y="95" width="370" height="34" rx="6" fill="#ff9800" fill-opacity="0.08" stroke="#ff9800" stroke-opacity="0.2"/>
-    <text x="14" y="117" font-size="15" fill="#bcc4d8">0.5s 窗口</text>
-    <text x="356" y="117" text-anchor="end" font-size="15" font-weight="600" fill="#ff9800">93.8%</text>
+  <g transform="translate(730, 578)">
+    <text x="0" y="0" font-size="14" fill="#7b8db0">上面例子: margin = <tspan font-weight="600" fill="#ff9800">0.65 − 0.12 = 0.53</tspan></text>
   </g>
 
-  <g transform="translate(1480, 225)">
-    <text x="0" y="0" font-size="16" fill="#aab4cc">在线评测</text>
-    <rect x="0" y="15" width="320" height="34" rx="6" fill="#f093fb" fill-opacity="0.08" stroke="#f093fb" stroke-opacity="0.2"/>
-    <text x="14" y="37" font-size="15" fill="#bcc4d8">准确率</text>
-    <text x="306" y="37" text-anchor="end" font-size="15" font-weight="600" fill="#f093fb">89.4%</text>
-    <rect x="0" y="55" width="320" height="34" rx="6" fill="#ff9800" fill-opacity="0.08" stroke="#ff9800" stroke-opacity="0.2"/>
-    <text x="14" y="77" font-size="15" fill="#bcc4d8">提前停止率</text>
-    <text x="306" y="77" text-anchor="end" font-size="15" font-weight="600" fill="#ff9800">85.6%</text>
-    <rect x="0" y="95" width="320" height="34" rx="6" fill="#43e97b" fill-opacity="0.08" stroke="#43e97b" stroke-opacity="0.2"/>
-    <text x="14" y="117" font-size="15" fill="#bcc4d8">平均决策时间</text>
-    <text x="306" y="117" text-anchor="end" font-size="15" font-weight="600" fill="#43e97b">0.8s</text>
-    <rect x="0" y="135" width="320" height="34" rx="6" fill="#4facfe" fill-opacity="0.08" stroke="#4facfe" stroke-opacity="0.2"/>
-    <text x="14" y="157" font-size="15" fill="#bcc4d8">ITR</text>
-    <text x="306" y="157" text-anchor="end" font-size="15" font-weight="600" fill="#4facfe">1.90 bit/s</text>
+  <!-- Threshold explanation -->
+  <text x="730" y="635" font-size="17" fill="#43e97b" font-weight="600">双阈值联合判定</text>
+  <rect x="730" y="653" width="470" height="130" rx="8" fill="#43e97b" fill-opacity="0.06" stroke="#43e97b" stroke-opacity="0.2"/>
+  <text x="750" y="678" font-size="15" fill="#bcc4d8">只有 <tspan font-weight="600" fill="#4facfe">两者同时</tspan> 满足时才提前停止:</text>
+  <rect x="750" y="692" width="430" height="36" rx="6" fill="#4facfe" fill-opacity="0.1"/>
+  <text x="770" y="715" font-size="15" fill="#e8ecf4">置信度 &gt; 0.35 → 模型至少比较确信</text>
+  <rect x="750" y="734" width="430" height="36" rx="6" fill="#ff9800" fill-opacity="0.1"/>
+  <text x="770" y="757" font-size="15" fill="#e8ecf4">边际值 &gt; 0.10 → 第一和第二明显拉开</text>
+
+  <!-- Why two thresholds -->
+  <text x="730" y="820" font-size="14" fill="#7888a0">为什么两个阈值? 单用置信度可能四个方向都很高(不区分),</text>
+  <text x="730" y="845" font-size="14" fill="#7888a0">单用边际可能第一名只是略高于背景噪声。两者互补。</text>
+
+  <text x="730" y="885" font-size="14" fill="#647090">参数来源: 伪在线仿真遍历搜索 → margin 0.05~0.45, max 0.25~0.85</text>
+  <text x="730" y="910" font-size="14" fill="#647090">→ 最优平衡点: margin=0.10, max=0.35</text>
+
+  <!-- ===== RIGHT: Performance ===== -->
+  <rect x="1270" y="140" width="570" height="370" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
+  <text x="1310" y="185" font-size="20" font-weight="600" fill="#d0d8f0">性能指标</text>
+
+  <g transform="translate(1310, 215)">
+    <text x="0" y="0" font-size="15" fill="#aab4cc">离线准确率</text>
+    <rect x="0" y="15" width="490" height="34" rx="6" fill="#4facfe" fill-opacity="0.08" stroke="#4facfe" stroke-opacity="0.2"/>
+    <text x="14" y="37" font-size="14" fill="#bcc4d8">2.0s 窗口</text>
+    <text x="476" y="37" text-anchor="end" font-size="14" font-weight="600" fill="#4facfe">100%</text>
+    <rect x="0" y="55" width="490" height="34" rx="6" fill="#ff9800" fill-opacity="0.08" stroke="#ff9800" stroke-opacity="0.2"/>
+    <text x="14" y="77" font-size="14" fill="#bcc4d8">0.5s 窗口</text>
+    <text x="476" y="77" text-anchor="end" font-size="14" font-weight="600" fill="#ff9800">93.8%</text>
+  </g>
+
+  <g transform="translate(1310, 325)">
+    <text x="0" y="0" font-size="15" fill="#aab4cc">在线评测 (5折交叉验证)</text>
+    <rect x="0" y="15" width="490" height="34" rx="6" fill="#f093fb" fill-opacity="0.08" stroke="#f093fb" stroke-opacity="0.2"/>
+    <text x="14" y="37" font-size="14" fill="#bcc4d8">准确率</text>
+    <text x="476" y="37" text-anchor="end" font-size="14" font-weight="600" fill="#f093fb">89.4%</text>
+    <rect x="0" y="55" width="490" height="34" rx="6" fill="#ff9800" fill-opacity="0.08" stroke="#ff9800" stroke-opacity="0.2"/>
+    <text x="14" y="77" font-size="14" fill="#bcc4d8">提前停止率</text>
+    <text x="476" y="77" text-anchor="end" font-size="14" font-weight="600" fill="#ff9800">85.6%</text>
+    <rect x="0" y="95" width="490" height="34" rx="6" fill="#43e97b" fill-opacity="0.08" stroke="#43e97b" stroke-opacity="0.2"/>
+    <text x="14" y="117" font-size="14" fill="#bcc4d8">平均决策</text>
+    <text x="476" y="117" text-anchor="end" font-size="14" font-weight="600" fill="#43e97b">0.8s</text>
+    <rect x="0" y="135" width="490" height="34" rx="6" fill="#4facfe" fill-opacity="0.08" stroke="#4facfe" stroke-opacity="0.2"/>
+    <text x="14" y="157" font-size="14" fill="#bcc4d8">ITR</text>
+    <text x="476" y="157" text-anchor="end" font-size="14" font-weight="600" fill="#4facfe">1.90 bit/s</text>
   </g>
 
   <!-- Config -->
-  <rect x="1020" y="565" width="820" height="390" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
-  <text x="1060" y="610" font-size="22" font-weight="600" fill="#d0d8f0">模型配置</text>
-
-  <g transform="translate(1060, 645)">
-    <text x="0" y="0" font-size="16" fill="#bcc4d8">算法   <tspan fill="#7b8db0">FBTDCA (Filter Bank Task-Decoupled Component Analysis)</tspan></text>
-    <text x="0" y="38" font-size="16" fill="#bcc4d8">子带   <tspan fill="#7b8db0">5  ·  权重 [1.25, 0.67, 0.50, 0.43, 0.38]</tspan></text>
-    <text x="0" y="76" font-size="16" fill="#bcc4d8">通道   <tspan fill="#7b8db0">8 个枕区电极 (O1, O2, Oz, PO3, PO4, PO5, PO6, POz)</tspan></text>
-    <text x="0" y="114" font-size="16" fill="#bcc4d8">窗口   <tspan fill="#7b8db0">4 个时间点模型 (125 / 250 / 375 / 500 点)</tspan></text>
-    <text x="0" y="152" font-size="16" fill="#bcc4d8">训练   <tspan fill="#7b8db0">160试次, 5折交叉验证, 无数据泄漏</tspan></text>
-    <text x="0" y="190" font-size="16" fill="#bcc4d8">来源   <tspan fill="#7b8db0">MetaBCI brainda.algorithms.decomposition.FBTDCA</tspan></text>
+  <rect x="1270" y="540" width="570" height="270" rx="16" fill="#ffffff" fill-opacity="0.03" stroke="#ffffff" stroke-opacity="0.08"/>
+  <text x="1310" y="585" font-size="20" font-weight="600" fill="#d0d8f0">模型配置</text>
+  <g transform="translate(1310, 620)">
+    <text x="0" y="0" font-size="14" fill="#bcc4d8">算法   <tspan fill="#7b8db0">FBTDCA (5子带滤波器组 + TDCA空间滤波)</tspan></text>
+    <text x="0" y="35" font-size="14" fill="#bcc4d8">通道   <tspan fill="#7b8db0">8个枕区电极 (O1,O2,Oz,PO3-PO6,POz)</tspan></text>
+    <text x="0" y="70" font-size="14" fill="#bcc4d8">窗口   <tspan fill="#7b8db0">4个时间点模型 (125/250/375/500点)</tspan></text>
+    <text x="0" y="105" font-size="14" fill="#bcc4d8">训练   <tspan fill="#7b8db0">160试次 5折交叉验证 无数据泄漏</tspan></text>
+    <text x="0" y="140" font-size="14" fill="#bcc4d8">来源   <tspan fill="#7b8db0">MetaBCI brainda.algorithms.decomposition.FBTDCA</tspan></text>
   </g>
 
   <!-- Footer -->
