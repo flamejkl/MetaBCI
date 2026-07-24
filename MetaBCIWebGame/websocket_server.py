@@ -344,10 +344,14 @@ class WebSocketServer:
                 log(f"[CTRL] 解码={command} 窗口={int(dec_t*1000)}ms conf={conf:.3f} "
                     f"分布={dict({k:v for k,v in realtime_stats.items() if k not in ('early','total')})} "
                     f"提前={early_rate:.0f}%")
+                # 构建四方向置信度（softmax归一化，前端期望数组[up,down,left,right]）
+                scores_exp = np.exp(scores - np.max(scores))
+                all_conf = [round(float(v), 3) for v in (scores_exp / scores_exp.sum()).tolist()]
                 await self._send_ws_safe({
                     "type": "realtime_command", "command": command,
                     "confidence": round(float(conf), 3),
                     "window_ms": int(float(dec_t) * 1000),
+                    "all_confidences": all_conf,
                 })
                 await self._broadcast_stim({"type": "stim_stop"})
                 # 短暂休息再下一轮
@@ -567,6 +571,9 @@ class WebSocketServer:
                                 f"窗口={int(dec_t*1000)}ms conf={conf:.3f} margin={margin:.3f} "
                                 f"累计={diag_acc:.1f}% {'⚡提前' if early else '🕐强制'}")
 
+                            # 构建四方向置信度（前端期望数组[up,down,left,right]）
+                            scores_exp = np.exp(scores - np.max(scores))
+                            all_conf = [round(float(v), 3) for v in (scores_exp / scores_exp.sum()).tolist()]
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
@@ -577,6 +584,7 @@ class WebSocketServer:
                                 "window_ms": int(float(dec_t) * 1000),
                                 "diag_acc_pct": round(diag_acc, 1),
                                 "diag_total": self._diag_total,
+                                "all_confidences": all_conf,
                             }))
                             # 停止闪烁，给被试休息时间
                             await self._broadcast_stim({"type": "stim_stop"})
