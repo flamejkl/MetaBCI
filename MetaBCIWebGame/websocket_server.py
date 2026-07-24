@@ -433,7 +433,7 @@ class WebSocketServer:
                                 window_samples=WINDOW_LEN_SAMPLES,
                                 slide_step=25,
                                 occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9],
-                                offset_only=True
+                                offset_only=False  # 浏览器数据无offset000后缀
                             )
                         except Exception as e:
                             log(f"离线生成器初始化失败: {e}")
