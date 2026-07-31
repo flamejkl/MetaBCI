@@ -184,6 +184,7 @@ class WebSocketServer:
         self.gw_decoder = None
         self.acq = None
         self.offline_gen = None
+        self._realtime_active = False
 
         # 离线演示专用：当前试次生成器
         self._demo_gen = None
@@ -265,6 +266,109 @@ class WebSocketServer:
         self._demo_gen = None
         log("[STOP] 所有组件已停止")
 
+    # ========== 实时脑控自动循环 ==========
+    async def _realtime_loop(self):
+        """自动循环: Trigger检测 → GW解码 → 返回命令 → 短暂休息 → 下一个"""
+        import time as _time
+        WINDOWS = [125, 250, 375, 500]
+        MARGIN_TH = 0.10
+        MAX_TH = 0.35
+        occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
+        realtime_stats = {"up":0,"down":0,"left":0,"right":0,"early":0,"total":0}
+        while self._realtime_active and self.acq is not None:
+            try:
+                if self.acq is None or not self._realtime_active:
+                    break
+                # 启动闪烁
+                await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus"})
+                if hasattr(self, '_skip_stale') and self._skip_stale:
+                    self._skip_stale()
+
+                # Trigger检测
+                start = self.acq.get_sample_count()
+                deadline = _time.time() + 5.0
+                onset = 0
+                while _time.time() < deadline and self._realtime_active and self.acq is not None:
+                    await asyncio.sleep(0.05)
+                    end = self.acq.get_sample_count()
+                    if end - start < 200:
+                        continue
+                    with self.acq._lock_full:
+                        full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                    trigger_ch = full[-1, :]
+                    for i in range(len(trigger_ch) - 1):
+                        if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                            onset = i + 1
+                            break
+                    if onset > 0:
+                        break
+
+                if onset == 0 or not self._realtime_active:
+                    await self._broadcast_stim({"type": "stim_stop"})
+                    continue
+                trigger_abs = start + onset
+
+                # 渐进窗口解码
+                decision = None; conf = 0.0; dec_t = 2.0
+                for L in WINDOWS:
+                    if not self._realtime_active or self.acq is None:
+                        break
+                    while _time.time() < deadline and self.acq is not None:
+                        with self.acq._lock:
+                            cur_len = len(self.acq.eeg_buffer)
+                        if cur_len >= trigger_abs + L:
+                            break
+                        await asyncio.sleep(0.02)
+                    if self.acq is None or not self._realtime_active:
+                        break
+                    with self.acq._lock:
+                        trial = np.array(self.acq.eeg_buffer[trigger_abs:trigger_abs + L], dtype=np.float64).T
+                    trial = trial[occ_idx, :]
+                    trial = trial - np.mean(trial, axis=1, keepdims=True)
+                    model = self.gw_decoder.models[L]
+                    scores = model.transform(trial[np.newaxis, ...])[0]
+                    top2 = np.partition(scores, -2)[-2:]
+                    margin = float(top2.max() - top2.min())
+                    conf = float(np.max(scores))
+                    decision = int(np.argmax(scores))
+                    dec_t = L / 250.0
+                    if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
+                        break
+
+                command = ["up", "down", "left", "right"][decision]
+                realtime_stats[command] += 1
+                realtime_stats["total"] += 1
+                if dec_t < 2.0:
+                    realtime_stats["early"] += 1
+                early_rate = realtime_stats["early"] / realtime_stats["total"] * 100
+                log(f"[CTRL] 解码={command} 窗口={int(dec_t*1000)}ms conf={conf:.3f} "
+                    f"分布={dict({k:v for k,v in realtime_stats.items() if k not in ('early','total')})} "
+                    f"提前={early_rate:.0f}%")
+                # 构建四方向置信度（softmax归一化，前端期望数组[up,down,left,right]）
+                scores_exp = np.exp(scores - np.max(scores))
+                all_conf = [round(float(v), 3) for v in (scores_exp / scores_exp.sum()).tolist()]
+                await self._send_ws_safe({
+                    "type": "realtime_command", "command": command,
+                    "confidence": round(float(conf), 3),
+                    "window_ms": int(float(dec_t) * 1000),
+                    "all_confidences": all_conf,
+                })
+                await self._broadcast_stim({"type": "stim_stop"})
+                # 短暂休息再下一轮
+                await asyncio.sleep(0.8)
+            except Exception:
+                traceback.print_exc()
+                await self._broadcast_stim({"type": "stim_stop"})
+                await asyncio.sleep(1.0)
+
+    async def _send_ws_safe(self, data):
+        """安全广播：向所有客户端发送消息。"""
+        for client in list(self.clients):
+            try:
+                await client.send(json.dumps(data))
+            except Exception:
+                pass
+
     # ========== 离线演示数据源回调（修改：返回三元组） ==========
     def _get_demo_sample(self):
         """
@@ -302,7 +406,7 @@ class WebSocketServer:
                         continue
 
                     # ---------- 停止命令 ----------
-                    if msg_type in ("stop_demo", "stop_eval", "stop_realtime"):
+                    if msg_type in ("stop_demo", "stop_eval"):
                         await self._stop_all()
                         await self._broadcast_stim({"type": "stim_stop"})
                         await websocket.send(json.dumps({"type": "status", "status": "stopped"}))
@@ -333,7 +437,7 @@ class WebSocketServer:
                                 window_samples=WINDOW_LEN_SAMPLES,
                                 slide_step=25,
                                 occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9],
-                                offset_only=True
+                                offset_only=False  # 浏览器数据无offset000后缀
                             )
                         except Exception as e:
                             log(f"离线生成器初始化失败: {e}")
@@ -386,84 +490,104 @@ class WebSocketServer:
                             if hasattr(self, '_skip_stale') and self._skip_stale:
                                 self._skip_stale()
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
-                            # ====== 固定0.5s(125点)诊断测试 ======
+                            # ====== Growing Window 动态停止在线解码 ======
                             import time as _time
-                            W = 125
-                            model = self.gw_decoder.models[W]
+                            WINDOWS = [125, 250, 375, 500]
+                            MARGIN_TH = 0.10
+                            MAX_TH = 0.35
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
-                            # 1) 等1秒采集数据
+                            # 1) 检测Trigger（用_lock_full读trigger通道）
                             start = self.acq.get_sample_count()
-                            await asyncio.sleep(1.0)
-                            end = self.acq.get_sample_count()
-
-                            # 2) 从全通道buffer提取
-                            with self.acq._lock_full:
-                                full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
-                            trigger_ch = full[-1, :]
-
-                            # 3) Trigger上升沿检测 + 详细日志
-                            t_uniq = np.unique(trigger_ch[:min(50, len(trigger_ch))])
+                            deadline = _time.time() + 5.0
                             onset = 0
-                            for i in range(len(trigger_ch) - 1):
-                                if trigger_ch[i] < 0.5 and trigger_ch[i + 1] >= 0.5:
-                                    onset = i + 1
+                            while _time.time() < deadline:
+                                await asyncio.sleep(0.05)
+                                end = self.acq.get_sample_count()
+                                if end - start < 200:
+                                    continue
+                                with self.acq._lock_full:
+                                    full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                                trigger_ch = full[-1, :]
+                                for i in range(len(trigger_ch) - 1):
+                                    if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                                        onset = i + 1
+                                        break
+                                if onset > 0:
                                     break
+                            trigger_abs = start + onset
 
-                            if onset == 0 or onset + W > full.shape[1]:
-                                onset = 0
+                            if onset == 0:
                                 self._diag_trigger_miss += 1
-                                log(f"[DIAG] ⚠️ 未检测到Trigger跳变! "
-                                    f"前50点唯一值={t_uniq.tolist()}, "
-                                    f"范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}], "
-                                    f"总长={len(trigger_ch)}")
-                            else:
-                                log(f"[DIAG] ✓ Trigger onset={onset}, "
-                                    f"前50点唯一值={t_uniq.tolist()}, "
-                                    f"跳变: {trigger_ch[onset-1]:.1f}→{trigger_ch[onset]:.1f}")
+                                log(f"[GW] ⚠️ Trigger未检测到")
+                                await websocket.send(json.dumps({"type":"eval_result","decoded":"error",
+                                    "expected":expected_dir,"match":False,"confidence":0,
+                                    "decision_time":2.0,"early":False,"window_ms":2000}))
+                                continue
 
-                            # 4) 提取数据 + 预处理（对齐训练）
-                            raw = full[self.acq.channel_indices, onset:onset + W]
-                            trial = raw.astype(np.float64)
-                            trial = trial[occ_idx, :]                    # 枕区8通道
-                            trial = trial - np.mean(trial, axis=1, keepdims=True)
+                            log(f"[GW] ✓ Trigger onset={onset}")
 
-                            # 5) 预测 + 真实置信度
-                            scores = model.transform(trial[np.newaxis, ...])[0]
-                            decision = int(np.argmax(scores))
-                            conf = float(np.max(scores))
-                            # margin: top1 vs top2 差距
-                            top2 = np.partition(scores, -2)[-2:]
-                            margin = float(top2.max() - top2.min())
+                            # 2) 渐进窗口: 用_lock读eeg_buffer(不阻塞_lock_full写!)
+                            decision = None; conf = 0.0; margin = 0.0; dec_t = 2.0
+                            for L in WINDOWS:
+                                # 等到目标通道buffer有L个采样点(trigger_abs+L)
+                                while _time.time() < deadline:
+                                    with self.acq._lock:
+                                        cur_len = len(self.acq.eeg_buffer)
+                                    if cur_len >= trigger_abs + L:
+                                        break
+                                    await asyncio.sleep(0.02)
+                                # 用_lock读(与_lock_full独立, 不阻塞数据采集)
+                                with self.acq._lock:
+                                    trial = np.array(
+                                        self.acq.eeg_buffer[trigger_abs:trigger_abs + L],
+                                        dtype=np.float64).T
+                                trial = trial[occ_idx, :]
+                                trial = trial - np.mean(trial, axis=1, keepdims=True)
 
-                            dec_t = W / 250.0
+                                model = self.gw_decoder.models[L]
+                                scores = model.transform(trial[np.newaxis, ...])[0]
+                                top2 = np.partition(scores, -2)[-2:]
+                                margin = float(top2.max() - top2.min())
+                                conf = float(np.max(scores))
+                                decision = int(np.argmax(scores))
+                                dec_t = L / 250.0
+                                if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
+                                    break  # 提前停止
+
+                            # 3) 结果
                             decoded_dir = ["up", "down", "left", "right"][decision]
                             match = (decoded_dir == expected_dir)
+                            early = float(dec_t) < 2.0
 
-                            # 6) 累计统计
+                            # 4) 统计
                             self._diag_total += 1
                             if match:
                                 self._diag_correct += 1
                             diag_acc = self._diag_correct / self._diag_total * 100
-                            miss_rate = self._diag_trigger_miss / self._diag_total * 100
 
-                            log(f"[DIAG] #{self._diag_total} 目标={expected_dir} "
+                            log(f"[GW] #{self._diag_total} 目标={expected_dir} "
                                 f"解码={decoded_dir} {'✓' if match else '✗'} "
-                                f"conf={conf:.3f} margin={margin:.3f} "
-                                f"累计准确率={diag_acc:.1f}% ({self._diag_correct}/{self._diag_total}) "
-                                f"Trigger丢失率={miss_rate:.1f}%")
+                                f"窗口={int(dec_t*1000)}ms conf={conf:.3f} margin={margin:.3f} "
+                                f"累计={diag_acc:.1f}% {'⚡提前' if early else '🕐强制'}")
 
+                            # 构建四方向置信度（前端期望数组[up,down,left,right]）
+                            scores_exp = np.exp(scores - np.max(scores))
+                            all_conf = [round(float(v), 3) for v in (scores_exp / scores_exp.sum()).tolist()]
                             await websocket.send(json.dumps({
                                 "type": "eval_result", "decoded": decoded_dir,
                                 "expected": expected_dir, "match": match,
                                 "confidence": round(float(conf), 3),
                                 "margin": round(margin, 3),
                                 "decision_time": round(float(dec_t), 3),
-                                "early": float(dec_t) < 2.0,
+                                "early": early,
                                 "window_ms": int(float(dec_t) * 1000),
                                 "diag_acc_pct": round(diag_acc, 1),
                                 "diag_total": self._diag_total,
+                                "all_confidences": all_conf,
                             }))
+                            # 停止闪烁，给被试休息时间
+                            await self._broadcast_stim({"type": "stim_stop"})
                             continue  # 跳过引擎流程
                         else:
                             self.engine.request_reset()
@@ -559,39 +683,33 @@ class WebSocketServer:
                             await asyncio.sleep(1.0)
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
 
-                        # 记录起点，轮询等待足够500个采样点（2秒×250Hz）
+                        # 记录起点，轮询等待—Trigger可能延迟到达
                         start = self.acq.get_sample_count()
                         import time as _time
-                        deadline = _time.time() + 2.5
-                        while True:
+                        deadline = _time.time() + 5.0
+                        full = None
+                        trigger_ch = None
+                        onset = 0
+                        while _time.time() < deadline:
                             await asyncio.sleep(0.05)
                             end = self.acq.get_sample_count()
-                            if end - start >= 800:  # 多等一些给trigger检测余量
-                                break
-                            if _time.time() > deadline:
-                                break
-                        if end - start < 500:
-                            log(f"[COLLECT] 数据不足: start={start} end={end}")
-                            await websocket.send(json.dumps({"type": "collect_error", "message": "数据不足"}))
-                            continue
-                        # 用 Trigger 通道精确定位试次起点（对齐离线实验）
-                        with self.acq._lock_full:
-                            full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
-                        trigger_ch = full[-1, :]
-                        # 调试：打印 Trigger 通道前10个值
-                        uniq = np.unique(trigger_ch)
-                        log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
-                        onset = 0
-                        for i in range(len(trigger_ch) - 1):
-                            if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
-                                onset = i + 1
-                                break
-                        if onset == 0:
-                            log(f"[COLLECT] 未检测到Trigger跳变，使用buffer起点")
-                        if onset + 500 > full.shape[1]:
-                            log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1]}")
+                            if end - start < 200:  # 数据还不够，继续等
+                                continue
+                            with self.acq._lock_full:
+                                full = np.array(self.acq.eeg_buffer_full[start:end], dtype=np.float64).T
+                            trigger_ch = full[-1, :]
+                            for i in range(len(trigger_ch) - 1):
+                                if trigger_ch[i] < 0.5 and trigger_ch[i+1] >= 0.5:
+                                    onset = i + 1
+                                    break
+                            if onset > 0 and onset + 500 <= full.shape[1]:
+                                break  # 找到Trigger且数据够
+                        if onset == 0 or onset + 500 > full.shape[1]:
+                            log(f"[COLLECT] 数据长度不足: onset={onset} total={full.shape[1] if full is not None else 'N/A'}")
                             await websocket.send(json.dumps({"type": "collect_error", "message": "数据长度不足"}))
                             continue
+                        uniq = np.unique(trigger_ch[:100])
+                        log(f"[COLLECT] Trigger通道: 唯一值={uniq.tolist()}, onset={onset}, 范围=[{trigger_ch.min():.1f},{trigger_ch.max():.1f}]")
                         # 提取目标通道+Trigger (对齐离线实验: 14EEG + Trigger)
                         ch_idx = self.acq.channel_indices + [64]
                         raw = full[ch_idx, onset:onset + 500]  # (15, 500)
@@ -613,28 +731,34 @@ class WebSocketServer:
                         await websocket.send(json.dumps({"type": "collect_stopped", "total": total}))
                         continue
 
-                    # ---------- 实时脑控启动 ----------
+                    # ---------- 实时脑控启动（自动循环解码）----------
                     if msg_type == "start_realtime":
                         log("[HANDLER] 收到 start_realtime")
                         if self.mode != "online":
-                            await websocket.send(json.dumps({"error": "请先切换到在线模式"}))
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "请先切换到在线模式"}))
                             continue
                         await self._stop_all()
                         self._load_model_and_engine()
-                        if self.engine is None:
-                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "引擎初始化失败"}))
+                        if self.gw_decoder is None:
+                            await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "解码器初始化失败"}))
                             continue
-
                         if not self._connect_acq():
                             await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "EEG设备未连接"}))
                             continue
-
-                        next_fn, skip_stale = _make_next_acq_sample(self.acq)
-                        self._skip_stale = skip_stale
-                        self.engine.data_source_callback = next_fn
-                        self.engine.set_mode(ContinuousStreamingEngine.State.REALTIME)
-                        await self.engine.start()
+                        self._realtime_active = True
+                        await self._broadcast_stim({"type": "stim_start"})
                         await websocket.send(json.dumps({"type": "realtime_status", "status": "started"}))
+                        # 启动自动循环
+                        asyncio.create_task(self._realtime_loop())
+                        log("[REALTIME] 脑控模式已启动")
+                        continue
+
+                    if msg_type == "stop_realtime":
+                        self._realtime_active = False
+                        await self._broadcast_stim({"type": "stim_stop"})
+                        await self._stop_all()
+                        await websocket.send(json.dumps({"type": "realtime_status", "status": "stopped"}))
+                        log("[REALTIME] 脑控模式已停止")
                         continue
 
                     # ---------- 其他消息 ----------

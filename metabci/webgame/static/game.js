@@ -1347,13 +1347,19 @@
             this._updateUI();
         }
 
-        // ---- game loop ----
+        // ---- game loop (SSVEP: 不自动移动, 仅渲染动画) ----
         _startLoop() {
             this._stopLoop();
-            this._tickTimer = setInterval(() => this._tick(), this.state.tickMs);
+            if (this._tickTimer) return;
+            const renderLoop = () => {
+                if (!this.state || !this.state.alive) { this._tickTimer = null; return; }
+                this.render(gameCtx);
+                this._tickTimer = requestAnimationFrame(renderLoop);
+            };
+            this._tickTimer = requestAnimationFrame(renderLoop);
         }
         _stopLoop() {
-            if (this._tickTimer) { clearInterval(this._tickTimer); this._tickTimer = null; }
+            if (this._tickTimer) { cancelAnimationFrame(this._tickTimer); this._tickTimer = null; }
         }
 
         _tick() {
@@ -1397,11 +1403,6 @@
                 s.score += 10;
                 s.growPending += 1;
                 this._spawnFood();
-                // Speed up slightly
-                if (s.tickMs > 120) {
-                    s.tickMs = Math.max(120, s.tickMs - 5);
-                    this._startLoop();  // restart timer with new interval
-                }
             } else if (s.growPending > 0) {
                 s.growPending--;
             } else {
@@ -1436,15 +1437,19 @@
             }, 2000);
         }
 
-        // ---- brain / keyboard input ----
+        // ---- brain / keyboard input (SSVEP: 每收到命令走一步, 不自动移动) ----
         handleMove(cmd) {
             const s = this.state;
             if (!s || !s.alive) return;
+            const valid = ['up', 'down', 'left', 'right'];
+            if (!valid.includes(cmd)) return;
             const opposite = { up: 'down', down: 'up', left: 'right', right: 'left' };
             // Prevent 180° reversal
             if (cmd !== opposite[s.direction]) {
                 s.nextDirection = cmd;
             }
+            // SSVEP控制: 收到命令立即走一步 (不做自动tick)
+            this._tick();
         }
 
         // ---- rendering ----
@@ -1575,32 +1580,20 @@
             this._stopLoop();
             const w = gameCanvas.width;
             const h = gameCanvas.height;
-            const roadLeft = w * 0.12;
-            const roadRight = w * 0.88;
+            const roadLeft = w * 0.05;
+            const roadRight = w * 0.95;
 
+            const roadW = roadRight - roadLeft;
+            const laneW = roadW / 4;
+            const laneCenters = [0, 1, 2, 3].map(i => roadLeft + laneW * (i + 0.5));
             this.state = {
-                roadLeft: roadLeft,
-                roadRight: roadRight,
-                roadW: roadRight - roadLeft,   // total drivable width in pixels
-                carX: w / 2,                   // car center x (pixel, continuous)
-                steerMomentum: 0,              // lateral velocity (px/s), decays over time
-                steerAmount: 80,               // px/s added per left/right command (MI incremental)
-                steerDecay: 3.0,               // momentum decay rate (per second)
-                speed: 180,                    // forward speed (px/s)
-                baseSpeed: 180,
-                maxSpeed: 500,
-                minSpeed: 60,
-                accelAmount: 30,               // px/s² per up command
-                brakeAmount: 40,               // px/s² per down command
-                score: 0,
-                distance: 0,
-                alive: true,
-                obstacles: [],                 // { x, y, w, h }
-                obstacleTimer: 0,
-                obstacleInterval: 1.2,         // seconds between spawns
-                roadOffset: 0,                 // scrolling dashes
-                carW: 48,
-                carH: 80,
+                roadLeft, roadRight, roadW, laneW, laneCenters,
+                lane: 1,
+                speed: 80, baseSpeed: 80, maxSpeed: 450, minSpeed: 80,
+                accelAmount: 40, brakeAmount: 50,
+                score: 0, distance: 0, alive: true,
+                obstacles: [], obstacleTimer: 0, obstacleInterval: 2.0,
+                roadOffset: 0, carW: 60, carH: 80,
             };
             this._gameOver = false;
             this._lastTime = performance.now();
@@ -1628,21 +1621,6 @@
             const dt = Math.min((now - this._lastTime) / 1000, 0.1);
             this._lastTime = now;
 
-            // ---- steering with momentum ----
-            // Apply momentum (decayed each frame)
-            s.steerMomentum *= Math.exp(-s.steerDecay * dt);
-            // Clamp tiny momentum to zero (avoid drift)
-            if (Math.abs(s.steerMomentum) < 0.5) s.steerMomentum = 0;
-            // Update car position
-            s.carX += s.steerMomentum * dt;
-            // Clamp to road edges (with half-car margin)
-            const halfCar = s.carW / 2 + 4;
-            s.carX = Math.max(s.roadLeft + halfCar, Math.min(s.roadRight - halfCar, s.carX));
-            // Stop momentum if hitting edge
-            if (s.carX <= s.roadLeft + halfCar + 1 || s.carX >= s.roadRight - halfCar - 1) {
-                s.steerMomentum = 0;
-            }
-
             // ---- forward movement ----
             s.distance += s.speed * dt;
             s.score = Math.floor(s.distance / 10);
@@ -1652,36 +1630,24 @@
             s.obstacleTimer += dt;
             if (s.obstacleTimer >= s.obstacleInterval) {
                 s.obstacleTimer = 0;
-                s.obstacleInterval = 0.6 + Math.random() * 1.5 / Math.min(s.speed / s.baseSpeed, 2.5);
+                s.obstacleInterval = 1.5 + Math.random() * 2.0 / Math.min(s.speed / s.baseSpeed, 2.5);
                 this._spawnObstacle();
             }
             for (let obs of s.obstacles) obs.y += s.speed * dt;
             s.obstacles = s.obstacles.filter(o => o.y < gameCanvas.height + 150);
 
-            // ---- collision (AABB) ----
-            const cl = s.carX - s.carW / 2 + 6;
-            const cr = s.carX + s.carW / 2 - 6;
+            // Collision (lane-based)
             const ct = gameCanvas.height - 130;
             const cb = gameCanvas.height - 30;
             for (let obs of s.obstacles) {
-                if (cl < obs.x + obs.w && cr > obs.x && ct < obs.y + obs.h && cb > obs.y) {
+                if (obs.lane === s.lane && obs.y + 70 > ct && obs.y < cb) {
                     this._die(); return;
                 }
             }
         }
 
         _spawnObstacle() {
-            const s = this.state;
-            const margin = s.carW;
-            const availWidth = s.roadW - margin * 2;
-            // Random x anywhere on road (continuous, not lane-locked)
-            const ox = s.roadLeft + margin + Math.random() * availWidth;
-            s.obstacles.push({
-                x: ox - s.carW / 2,
-                y: -120 - Math.random() * 250,
-                w: s.carW,
-                h: s.carH
-            });
+            this.state.obstacles.push({ lane: Math.floor(Math.random() * 4), y: -90 });
         }
 
         _die() {
@@ -1696,26 +1662,15 @@
             }, 2000);
         }
 
-        // ---- brain / keyboard (MI-style continuous incremental control) ----
+        // ---- SSVEP 四车道控制: left/right移车道, up/down加减速 ----
         handleMove(cmd) {
             const s = this.state;
             if (!s || !s.alive) return;
             switch (cmd) {
-                case 'left':
-                    // Add leftward momentum (cumulative with repeated MI commands)
-                    s.steerMomentum -= s.steerAmount;
-                    s.steerMomentum = Math.max(s.steerMomentum, -400);
-                    break;
-                case 'right':
-                    s.steerMomentum += s.steerAmount;
-                    s.steerMomentum = Math.min(s.steerMomentum, 400);
-                    break;
-                case 'up':
-                    s.speed = Math.min(s.maxSpeed, s.speed + s.accelAmount);
-                    break;
-                case 'down':
-                    s.speed = Math.max(s.minSpeed, s.speed - s.brakeAmount);
-                    break;
+                case 'left':  s.lane = Math.max(0, s.lane - 1); break;
+                case 'right': s.lane = Math.min(3, s.lane + 1); break;
+                case 'up':    s.speed = Math.min(s.maxSpeed, s.speed + s.accelAmount); break;
+                case 'down':  s.speed = Math.max(s.minSpeed, s.speed - s.brakeAmount); break;
             }
         }
 
@@ -1745,22 +1700,25 @@
             ctx.beginPath(); ctx.moveTo(s.roadLeft, 0); ctx.lineTo(s.roadLeft, h); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(s.roadRight, 0); ctx.lineTo(s.roadRight, h); ctx.stroke();
 
-            // Centre dashes (scrolling)
+            // Lane dividers (dashed)
             ctx.strokeStyle = '#ccc';
             ctx.lineWidth = 2;
-            ctx.setLineDash([25, 25]);
-            const cx = (s.roadLeft + s.roadRight) / 2;
-            ctx.beginPath(); ctx.moveTo(cx, s.roadOffset); ctx.lineTo(cx, h); ctx.stroke();
+            ctx.setLineDash([20, 30]);
+            for (let i = 1; i < 4; i++) {
+                const lx = s.roadLeft + s.laneW * i;
+                ctx.beginPath(); ctx.moveTo(lx, s.roadOffset); ctx.lineTo(lx, h); ctx.stroke();
+            }
             ctx.setLineDash([]);
 
-            // Obstacles
+            // Obstacles (lane-based)
             for (let obs of s.obstacles) {
-                const hue = (obs.y * 0.3 + Date.now() * 0.01) % 360;
-                this._drawCar(ctx, obs.x + obs.w / 2, obs.y + obs.h / 2, obs.w, obs.h, '#e74c3c');
+                const ox = s.roadLeft + s.laneW * (obs.lane + 0.5);
+                this._drawCar(ctx, ox, obs.y + 40, s.carW, s.carH, '#e74c3c');
             }
 
-            // Player car
-            this._drawCar(ctx, s.carX, h - 80, s.carW, s.carH, '#2196F3');
+            // Player car (current lane)
+            const cx = s.laneCenters[s.lane];
+            this._drawCar(ctx, cx, h - 80, s.carW, s.carH, '#2196F3');
 
             // Speed bar (right side)
             const speedPct = (s.speed - s.minSpeed) / (s.maxSpeed - s.minSpeed);
@@ -1777,13 +1735,13 @@
             ctx.fillText('km/h', w - 34, h - 2);
             ctx.textAlign = 'start';
 
-            // Steering indicator (small bar below speed)
-            const steerPct = s.steerMomentum / 400;  // -1..1
+            // Lane indicator
             ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.fillRect(w - 70, 48, 72, 10);
-            ctx.fillStyle = '#ff9800';
-            const indicatorX = w - 34 + steerPct * 30;
-            ctx.fillRect(indicatorX - 4, 49, 8, 8);
+            ctx.fillRect(w - 70, 48, 72, 14);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 10px monospace'; ctx.textAlign = 'center';
+            ctx.fillText(`L${s.lane+1}`, w - 34, 59);
+            ctx.textAlign = 'start';
 
             // HUD
             ctx.fillStyle = '#fff';

@@ -17,7 +17,11 @@ L_FREQ = 8
 H_FREQ = 30
 
 # ========== 模型参数 ==========
-MODEL_DIR = os.path.join(BASE_DIR, "models", "browser")
+# 旧模型 (POz未导通session, data_self_browser/20260721_*)
+MODEL_DIR_OLD = os.path.join(BASE_DIR, "models", "browser")
+
+# 新模型 (POz导通session, 当前采集)
+MODEL_DIR = os.path.join(BASE_DIR, "models", "browser_new")
 MODEL_PATH = os.path.join(MODEL_DIR, "self_ssvep_model_browser.pkl")
 
 # ========== 动态停止参数 ==========
