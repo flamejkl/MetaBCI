@@ -88,9 +88,6 @@
     let frameCount = 0;           // 总帧数计数器
 
     // ==================== 刺激块布局 ====================
-    // 离线实验参数 (run_ssvep_experiment.py: block=0.12屏宽, gap=0.1屏宽)
-    // 全屏用 vw/vh 比例；普通模式用固定像素
-    const STIM_RATIO = { block: 0.12, gap: 0.10 };
     const STIM_CONFIG = {
         blockWidth: 150,
         blockHeight: 168,
@@ -101,31 +98,43 @@
 
     function initStimPositions() {
         const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
-        const cw = stimCanvas.width;
-        const ch = stimCanvas.height;
 
-        let bw, bh, gap;
         if (isFs) {
-            // 匹配离线实验比例: block=15vw, gap=10vw
-            bw = Math.round(STIM_RATIO.block * window.innerWidth);
-            gap = Math.round(STIM_RATIO.gap * window.innerWidth);
-            bh = Math.min(bw, ch - 8);   // 正方形，不超过 canvas 高度
-            bw = Math.min(bw, bh);
-        } else {
-            bw = STIM_CONFIG.blockWidth;
-            bh = STIM_CONFIG.blockHeight;
-            gap = STIM_CONFIG.gap;
+            // 十字排布: 游戏固定大小居中, 四个块统一尺寸, 贴游戏边缘
+            const cw = stimCanvas.width, ch = stimCanvas.height;
+            const gs  = gameCanvas.width;   // 游戏固定尺寸
+            const gx  = (cw - gs) / 2;      // 游戏左上角 x
+            const gy  = (ch - gs) / 2;      // 游戏左上角 y
+            const gcx = cw / 2;             // 游戏中心 x
+            const gcy = ch / 2;             // 游戏中心 y
+
+            // 块紧贴游戏边缘, 外扩填满间隙, 四块统一最小间隙尺寸
+            const topGap = gy, bottomGap = ch - gy - gs;
+            const leftGap = gx, rightGap = cw - gx - gs;
+            const minGap = Math.min(topGap, bottomGap, leftGap, rightGap);
+            const blockSize = Math.round(minGap * 0.95);  // 填满最小间隙 95%
+
+            // 块中心 = 游戏边缘向外推半个块宽, 确保内边贴游戏边
+            const pos = {};
+            pos['up']    = { x: gcx,             y: Math.max(blockSize/2, gy - blockSize/2),        w: blockSize, h: blockSize };
+            pos['down']  = { x: gcx,             y: Math.min(ch - blockSize/2, gy + gs + blockSize/2), w: blockSize, h: blockSize };
+            pos['left']  = { x: Math.max(blockSize/2, gx - blockSize/2),        y: gcy,              w: blockSize, h: blockSize };
+            pos['right'] = { x: Math.min(cw - blockSize/2, gx + gs + blockSize/2), y: gcy,           w: blockSize, h: blockSize };
+            return pos;
         }
 
+        // 非全屏: 底部横排
+        const cw = stimCanvas.width, ch = stimCanvas.height;
+        const bw = STIM_CONFIG.blockWidth;
+        const bh = STIM_CONFIG.blockHeight;
+        const gap = STIM_CONFIG.gap;
         const totalW = bw * 4 + gap * 3;
         const startX = (cw - totalW) / 2;
         const baseY = (ch - bh) / 2;
         const dirOrder = ['up', 'down', 'left', 'right'];
         const pos = {};
         dirOrder.forEach((dir, i) => {
-            const x = startX + i * (bw + gap) + bw / 2;
-            const y = baseY + bh / 2;
-            pos[dir] = { x, y, w: bw, h: bh };
+            pos[dir] = { x: startX + i * (bw + gap) + bw/2, y: baseY + bh/2, w: bw, h: bh };
         });
         return pos;
     }
@@ -165,7 +174,10 @@
             stimCtx.fillStyle = `rgb(${gray}, ${gray}, ${gray})`;
             stimCtx.fillRect(x, y, pos.w, pos.h);
             stimCtx.fillStyle = (gray > 128) ? '#000' : '#fff';
-            stimCtx.font = '28px Arial';
+            const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
+            stimCtx.font = isFs
+                ? `${Math.round(pos.h * 0.4)}px Arial`   // 全屏: 40% 块高度
+                : '28px Arial';
             stimCtx.textAlign = 'center';
             stimCtx.textBaseline = 'middle';
             const label = {up:'↑', down:'↓', left:'←', right:'→'}[dir];
@@ -311,8 +323,11 @@
             gameCanvas.height = 800;
             gameCanvas.style.width = '800px';
             gameCanvas.style.height = '800px';
-            gameCanvas.style.borderRadius = '20px 20px 0 0';
-            if (activeGame) activeGame.render(gameCtx);
+            gameCanvas.style.borderRadius = '20px';
+            if (activeGame) {
+                activeGame.init();
+                activeGame.render(gameCtx);
+            }
         }
         updateStimLayout();
         // 确保动画循环运行（全屏切换可能导致 rAF 暂停）
@@ -324,26 +339,24 @@
     function updateStimLayout() {
         const isFs = !!(document.fullscreenElement || document.webkitFullscreenElement);
         if (isFs) {
+            stimCanvas.style.display = 'block';
             stimCanvas.width = window.innerWidth;
-            stimCanvas.height = Math.round(window.innerHeight * 0.26);
+            stimCanvas.height = window.innerHeight - 36;
             stimCanvas.style.width = '100vw';
-            stimCanvas.style.height = '26vh';
+            stimCanvas.style.height = `calc(100vh - 36px)`;
+            positions = initStimPositions();
+            drawStimuli(performance.now());
         } else {
-            stimCanvas.width = 800;
-            stimCanvas.height = 180;
-            stimCanvas.style.width = '800px';
-            stimCanvas.style.height = '180px';
+            stimCanvas.style.display = 'none';
         }
-        positions = initStimPositions();
-        drawStimuli(performance.now());
     }
 
     function resizeGameForFullscreen() {
         const headerH = 36;
-        const stimH = Math.round(window.innerHeight * 0.25); // 留给 PsychoPy
-        const availH = window.innerHeight - headerH - stimH;
-        const availW = window.innerWidth;
-        const size = Math.floor(Math.min(availH * 0.92, availW * 0.90));
+        const blockMargin = Math.round(window.innerWidth * 0.11); // 每边预留 11vw
+        const availH = window.innerHeight - headerH - blockMargin * 2;
+        const availW = window.innerWidth - blockMargin * 2;
+        const size = Math.floor(Math.min(availH, availW));
         gameCanvas.width = size;
         gameCanvas.height = size;
         gameCanvas.style.width = size + 'px';

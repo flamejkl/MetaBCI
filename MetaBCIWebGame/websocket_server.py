@@ -13,20 +13,20 @@ import threading
 import time
 import websockets
 import numpy as np
-import joblib
 import random
 import traceback
 from collections import deque
 from typing import Optional, Callable, Awaitable, Tuple, Any
 from config import (
-    WS_HOST, WS_PORT, MODEL_PATH, NEURACLE_IP, NEURACLE_PORT,
+    WS_HOST, WS_PORT, NEURACLE_IP, NEURACLE_PORT,
     OFFLINE_DATA_ROOT, WINDOW_LEN_SAMPLES, ONLINE_SAMPLE_RATE,
-    DEMO_DATA_ROOT, GW_MODEL_PATHS
+    DEMO_DATA_ROOT,
+    STIM_FREQS, SAMPLE_RATE, OCCIPITAL_INDICES,
 )
 from data_acquisition import DataAcquisition
 
-# ---- MetaBCI 框架集成 ----
-from metabci.brainda.algorithms.decomposition import GrowingWindowDecoder
+# ---- 解码器 ----
+from fbcca_decoder import FBCCADecoder
 from metabci.brainda.datasets import SelfSSVEP
 from metabci.brainflow.online import ContinuousStreamingEngine
 from metabci.brainflow.logger import get_logger
@@ -176,12 +176,11 @@ class WebSocketServer:
         self.mode = 'offline'
 
         self.engine = None
-        self.model = None
-        # 0.5s 诊断统计
+        # 诊断统计
         self._diag_correct = 0
         self._diag_total = 0
         self._diag_trigger_miss = 0
-        self.gw_decoder = None
+        self.fbcca_decoder = None
         self.acq = None
         self.offline_gen = None
         self._realtime_active = False
@@ -191,37 +190,35 @@ class WebSocketServer:
 
     # ========== 统一初始化 ==========
     def _load_model_and_engine(self):
-        if self.model is None:
-            try:
-                self.model = joblib.load(MODEL_PATH)
-                log(f"✅ 模型加载成功: {MODEL_PATH}")
-            except Exception as e:
-                log(f"❌ 模型加载失败: {e}")
-                self.model = None
-                return
-
         if self.engine is None:
-            self._init_gw_decoder()
-            if self.gw_decoder is None:
-                log("❌ Growing Window 解码器初始化失败")
+            self._init_fbcca_decoder()
+            if self.fbcca_decoder is None:
+                log("❌ FBCCA 解码器初始化失败")
                 return
             self.engine = ContinuousStreamingEngine(
-                model=self.model,
-                decoder=self.gw_decoder,
+                model=None,          # FBCCA 零训练, 无需模型文件
+                decoder=self.fbcca_decoder,
                 occipital_indices=[2, 3, 4, 5, 6, 7, 8, 9]
             )
             self.engine.emit_callback = self._send_websocket
-            log("✅ 连续流引擎已创建")
+            log("✅ FBCCA 引擎已创建 (零训练)")
 
-    def _init_gw_decoder(self):
-        if self.gw_decoder is None:
+    def _init_fbcca_decoder(self):
+        if self.fbcca_decoder is None:
             try:
-                self.gw_decoder = GrowingWindowDecoder(model_paths=GW_MODEL_PATHS, enable_online_norm=True)
-                log("✅ Growing Window 解码器已初始化")
+                self.fbcca_decoder = FBCCADecoder(
+                    freqs=STIM_FREQS,
+                    sample_rate=SAMPLE_RATE,
+                    n_channels=len(OCCIPITAL_INDICES),
+                    min_len=250,     # 1.0s 起检
+                    max_len=500,     # 2.0s 强制输出
+                    margin_th=0.10,
+                )
+                log("✅ FBCCA 解码器已初始化 (零训练)")
             except Exception as e:
-                log(f"❌ Growing Window 解码器初始化失败: {e}")
-                self.gw_decoder = None
-        return self.gw_decoder
+                log(f"❌ FBCCA 解码器初始化失败: {e}")
+                self.fbcca_decoder = None
+        return self.fbcca_decoder
 
     def _connect_acq(self):
         if self.acq is not None:
@@ -268,11 +265,10 @@ class WebSocketServer:
 
     # ========== 实时脑控自动循环 ==========
     async def _realtime_loop(self):
-        """自动循环: Trigger检测 → GW解码 → 返回命令 → 短暂休息 → 下一个"""
+        """自动循环: Trigger检测 → FBCCA解码 → 返回命令 → 短暂休息 → 下一个"""
         import time as _time
-        WINDOWS = [125, 250, 375, 500]
+        WINDOWS = [250, 375, 500]  # FBCCA 1.0s起检
         MARGIN_TH = 0.10
-        MAX_TH = 0.35
         occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
         realtime_stats = {"up":0,"down":0,"left":0,"right":0,"early":0,"total":0}
         while self._realtime_active and self.acq is not None:
@@ -325,14 +321,13 @@ class WebSocketServer:
                         trial = np.array(self.acq.eeg_buffer[trigger_abs:trigger_abs + L], dtype=np.float64).T
                     trial = trial[occ_idx, :]
                     trial = trial - np.mean(trial, axis=1, keepdims=True)
-                    model = self.gw_decoder.models[L]
-                    scores = model.transform(trial[np.newaxis, ...])[0]
+                    scores = self.fbcca_decoder._compute_scores(trial)
                     top2 = np.partition(scores, -2)[-2:]
                     margin = float(top2.max() - top2.min())
                     conf = float(np.max(scores))
                     decision = int(np.argmax(scores))
                     dec_t = L / 250.0
-                    if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
+                    if L < 500 and margin > MARGIN_TH:
                         break
 
                 command = ["up", "down", "left", "right"][decision]
@@ -492,9 +487,8 @@ class WebSocketServer:
                             await self._broadcast_stim({"type": "stim_phase", "phase": "stimulus", "direction": expected_dir})
                             # ====== Growing Window 动态停止在线解码 ======
                             import time as _time
-                            WINDOWS = [125, 250, 375, 500]
+                            WINDOWS = [250, 375, 500]  # FBCCA 1.0s起检
                             MARGIN_TH = 0.10
-                            MAX_TH = 0.35
                             occ_idx = [2, 3, 4, 5, 6, 7, 8, 9]
 
                             # 1) 检测Trigger（用_lock_full读trigger通道）
@@ -519,15 +513,15 @@ class WebSocketServer:
 
                             if onset == 0:
                                 self._diag_trigger_miss += 1
-                                log(f"[GW] ⚠️ Trigger未检测到")
+                                log(f"[FBCCA] ⚠️ Trigger未检测到")
                                 await websocket.send(json.dumps({"type":"eval_result","decoded":"error",
                                     "expected":expected_dir,"match":False,"confidence":0,
                                     "decision_time":2.0,"early":False,"window_ms":2000}))
                                 continue
 
-                            log(f"[GW] ✓ Trigger onset={onset}")
+                            log(f"[FBCCA] ✓ Trigger onset={onset}")
 
-                            # 2) 渐进窗口: 用_lock读eeg_buffer(不阻塞_lock_full写!)
+                            # 2) 渐进窗口: FBCCA 打分 + 动态停止
                             decision = None; conf = 0.0; margin = 0.0; dec_t = 2.0
                             for L in WINDOWS:
                                 # 等到目标通道buffer有L个采样点(trigger_abs+L)
@@ -545,14 +539,14 @@ class WebSocketServer:
                                 trial = trial[occ_idx, :]
                                 trial = trial - np.mean(trial, axis=1, keepdims=True)
 
-                                model = self.gw_decoder.models[L]
-                                scores = model.transform(trial[np.newaxis, ...])[0]
+                                # FBCCA 打分 (零训练, sin+cos 参考信号)
+                                scores = self.fbcca_decoder._compute_scores(trial)
                                 top2 = np.partition(scores, -2)[-2:]
                                 margin = float(top2.max() - top2.min())
                                 conf = float(np.max(scores))
                                 decision = int(np.argmax(scores))
                                 dec_t = L / 250.0
-                                if L < 500 and margin > MARGIN_TH and conf > MAX_TH:
+                                if L < 500 and margin > self.fbcca_decoder.margin_th:
                                     break  # 提前停止
 
                             # 3) 结果
@@ -566,7 +560,7 @@ class WebSocketServer:
                                 self._diag_correct += 1
                             diag_acc = self._diag_correct / self._diag_total * 100
 
-                            log(f"[GW] #{self._diag_total} 目标={expected_dir} "
+                            log(f"[FBCCA] #{self._diag_total} 目标={expected_dir} "
                                 f"解码={decoded_dir} {'✓' if match else '✗'} "
                                 f"窗口={int(dec_t*1000)}ms conf={conf:.3f} margin={margin:.3f} "
                                 f"累计={diag_acc:.1f}% {'⚡提前' if early else '🕐强制'}")
@@ -739,7 +733,7 @@ class WebSocketServer:
                             continue
                         await self._stop_all()
                         self._load_model_and_engine()
-                        if self.gw_decoder is None:
+                        if self.fbcca_decoder is None:
                             await websocket.send(json.dumps({"type": "realtime_status", "status": "error", "message": "解码器初始化失败"}))
                             continue
                         if not self._connect_acq():

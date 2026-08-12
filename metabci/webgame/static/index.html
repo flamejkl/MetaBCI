@@ -72,25 +72,16 @@
         }
         #gameCanvas {
             background-color: #111;
-            border-radius: 20px 20px 0 0;
+            border-radius: 20px;
             box-shadow: 0 10px 20px rgba(0,0,0,0.5);
             border: 2px solid #ff9800;
-            border-bottom: none;
             width: 800px;
             height: 800px;
             display: block;
         }
-        /* 刺激 Canvas — 独立于 .container，全屏时固定底部 */
+        /* 刺激 Canvas — 仅全屏模式使用, 普通模式隐藏 */
         #stimCanvas {
-            background-color: transparent;
-            border-radius: 0 0 20px 20px;
-            border: 2px solid #ff9800;
-            border-top: none;
-            width: 800px;
-            height: 180px;
-            display: block;
-            box-shadow: 0 10px 20px rgba(0,0,0,0.5);
-            pointer-events: none;
+            display: none;
         }
         .maze-controls-container {
             width: 800px;
@@ -200,13 +191,13 @@
             align-items: center;
         }
 
-        /* ---- 游戏主容器 (fixed, 左上区域) ---- */
+        /* ---- 游戏主容器 (fixed, 居中, 全区域) ---- */
         body.fullscreen .container {
             position: fixed;
             top: 36px;
             left: 0;
             right: 0;
-            bottom: 22vh;        /* 给刺激块留空间 */
+            bottom: 0;
             background: transparent;
             box-shadow: none;
             backdrop-filter: none;
@@ -216,6 +207,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
+            z-index: 50;
         }
         body.fullscreen header {
             display: none;
@@ -238,6 +230,8 @@
             border-radius: 8px;
             border: 1px solid #333;
             box-shadow: 0 0 30px rgba(0,0,0,0.5);
+            width: auto;
+            height: auto;
         }
         body.fullscreen .maze-controls-container {
             display: flex !important;
@@ -246,7 +240,7 @@
             top: 36px;
             right: 2vw;
             width: clamp(160px, 18vw, 240px);
-            bottom: 22vh;
+            bottom: 0;
             flex-wrap: nowrap;
             justify-content: center;
             gap: 1.5vh;
@@ -254,7 +248,7 @@
             border-left: 1px solid #2a2a2a;
             border-radius: 0;
             padding: 2vw 1.5vw;
-            z-index: 50;
+            z-index: 51;
         }
         body.fullscreen .maze-controls-container label {
             color: #aaa;
@@ -274,9 +268,19 @@
             display: none;
         }
 
-        /* ---- 底部由 PsychoPy 置顶覆盖，隐藏浏览器 Canvas ---- */
+        /* ---- 刺激区域 (浮于游戏画面之上, 边缘不阻挡操作) ---- */
         body.fullscreen #stimCanvas {
-            display: none;
+            display: block;
+            position: fixed;
+            top: 36px;
+            left: 0;
+            width: 100vw;
+            height: calc(100vh - 36px);
+            border: none;
+            border-radius: 0;
+            background: transparent;
+            pointer-events: none;
+            z-index: 10;
         }
 
         /* ---- 浮动控制面板（vw/vh 自适应缩放）---- */
